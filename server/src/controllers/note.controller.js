@@ -1,125 +1,195 @@
-const { success, fail } = require('../utils/response');
+import Note from '../models/Note.js';
+import Tag from '../models/Tag.js';
+import Collection from '../models/Collection.js';
+import { generateEmbedding, cosineSimilarity } from '../services/embedding.service.js';
 
-// STUB NoteController - khớp mục 2.4.3 (schema Note) và sequence diagram
-// "Tạo ghi chú" / "Xem gợi ý ghi chú liên quan" (mục 2.7.1, 2.7.3).
-// Dữ liệu demo lấy lại đúng ví dụ đã dùng xuyên suốt báo cáo để bro test
-// bằng chính nội dung quen thuộc thay vì "lorem ipsum".
-
-const DEMO_NOTES = [
-  {
-    id: 'note-001',
-    title: 'Fix double submit bug',
-    content: 'Dùng idempotency key lưu trong Redis để chặn request gửi trùng khi client bấm submit nhiều lần.',
-    type: 'solution',
-    tagIds: ['tag-backend', 'tag-idempotency'],
-    embeddingStatus: 'success',
-    createdAt: '2026-07-18T10:00:00Z',
-  },
-  {
-    id: 'note-002',
-    title: 'Debounce hook cho search input',
-    content: 'Custom hook useDebounce trì hoãn gọi API tìm kiếm 300ms sau lần gõ cuối.',
-    type: 'code_snippet',
-    tagIds: ['tag-react'],
-    embeddingStatus: 'success',
-    createdAt: '2026-07-20T09:00:00Z',
-  },
-];
-
-function createNote(req, res) {
-  const { title, content, type } = req.body || {};
-  if (!title || !content) {
-    return fail(res, 'VALIDATION_ERROR', 'Thiếu title hoặc content', 422);
-  }
-
-  // Nhánh lỗi AI ở sequence diagram 2.7.1: demo bằng cách gõ content chứa "__aifail"
-  const aiFailed = content.includes('__aifail');
-
-  return success(
-    res,
-    {
-      id: 'note-' + Date.now(),
-      userId: req.user.id,
+// Create note
+export const createNote = async (req, res) => {
+  try {
+    const { title, content, tags, collections } = req.body;
+    
+    // Validate input
+    if (!title || !content) {
+      return res.status(400).json({ 
+        message: 'Thiếu title hoặc content' // "Missing title or content" - matches TC02
+      });
+    }
+    
+    if (title.length > 200) {
+      return res.status(400).json({ 
+        message: 'Tiêu đề vượt quá 200 ký tự' // "Title exceeds 200 characters" - matches TC03
+      });
+    }
+    
+    // Create note with pending status 
+    const note = new Note({
       title,
       content,
-      type: type || 'note',
-      tagIds: [],
-      embedding: aiFailed ? null : new Array(1536).fill(0),
-      embeddingStatus: aiFailed ? 'failed' : 'success',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-    201
-  );
-}
+      userId: req.user.id,
+      embeddingStatus: 'pending',
+      tags: tags || [],
+      collections: collections || []
+    });
+    
+    await note.save();
+    
+    // Try to generate embedding asynchronously 
+    try {
+      const embedding = await generateEmbedding(content);
+      if (embedding) {
+        note.embedding = embedding;
+        note.embeddingStatus = 'success';
+      } else {
+        note.embeddingStatus = 'failed';
+      }
+      await note.save();
+    } catch (aiError) {
+      // Note still saved even if AI fails 
+      note.embeddingStatus = 'failed';
+      await note.save();
+      console.error('AI embedding failed but note saved:', aiError);
+    }
+    
+    const populatedNote = await note.populate(['tags', 'collections']);
+    res.status(201).json(populatedNote);
+    
+  } catch (error) {
+    console.error('Create note error:', error);
+    res.status(500).json({ message: 'Tạo ghi chú thất bại' }); // matches TC05
+  }
+};
 
-function getNotes(req, res) {
-  return success(res, DEMO_NOTES);
-}
+// Get all notes
+export const getNotes = async (req, res) => {
+  try {
+    const { tagId, collectionId } = req.query;
+    const query = { userId: req.user.id };
+    
+    if (tagId) query.tags = tagId;
+    if (collectionId) query.collections = collectionId;
+    
+    const notes = await Note.find(query)
+      .populate(['tags', 'collections'])
+      .sort({ createdAt: -1 });
+    
+    res.json(notes);
+  } catch (error) {
+    console.error('Get notes error:', error);
+    res.status(500).json({ message: 'Lỗi lấy danh sách ghi chú' });
+  }
+};
 
-function getNoteWithRelated(req, res) {
-  const note = DEMO_NOTES.find((n) => n.id === req.params.id) || DEMO_NOTES[0];
+// Get single note with related suggestions 
+export const getNote = async (req, res) => {
+  try {
+    const note = await Note.findById(req.params.id)
+      .populate(['tags', 'collections']);
+    
+    if (!note) {
+      return res.status(404).json({ message: 'Không tìm thấy ghi chú' });
+    }
+    
+    // Check ownership
+    if (note.userId.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Không có quyền truy cập' });
+    }
+    
+    // Get related notes if embedding exists 
+    let relatedNotes = [];
+    if (note.embeddingStatus === 'success' && note.embedding) {
+      const otherNotes = await Note.find({
+        userId: req.user.id,
+        _id: { $ne: note._id },
+        embeddingStatus: 'success'
+      });
+      
+      const scored = otherNotes.map(n => ({
+        ...n.toObject(),
+        similarityScore: cosineSimilarity(note.embedding, n.embedding)
+      }));
+      
+      const THRESHOLD = 0.65;
+      relatedNotes = scored
+        .filter(item => item.similarityScore >= THRESHOLD)
+        .sort((a, b) => b.similarityScore - a.similarityScore)
+        .slice(0, 5);
+    }
+    
+    res.json({
+      ...note.toObject(),
+      relatedNotes
+    });
+    
+  } catch (error) {
+    console.error('Get note error:', error);
+    res.status(500).json({ message: 'Lỗi lấy ghi chú' });
+  }
+};
 
-  // Khớp nhánh alt "note.embeddingStatus == success" ở sequence diagram 2.7.3
-  const relatedNotes =
-    note.embeddingStatus === 'success'
-      ? [
-          { id: 'note-003', title: 'Rate limit API bằng token bucket', score: 0.92 },
-          { id: 'note-004', title: 'Webhook Momo xử lý gửi trùng', score: 0.88 },
-        ]
-      : [];
+// Update note
+export const updateNote = async (req, res) => {
+  try {
+    const { title, content, tags, collections } = req.body;
+    const note = await Note.findById(req.params.id);
+    
+    if (!note) {
+      return res.status(404).json({ message: 'Không tìm thấy ghi chú' });
+    }
+    
+    if (note.userId.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Không có quyền' });
+    }
+    
+    // Update fields
+    if (title) note.title = title;
+    if (content) note.content = content;
+    if (tags) note.tags = tags;
+    if (collections) note.collections = collections;
+    
+    // If content changed, regenerate embedding
+    if (content && content !== note.content) {
+      note.embeddingStatus = 'pending';
+      try {
+        const embedding = await generateEmbedding(content);
+        if (embedding) {
+          note.embedding = embedding;
+          note.embeddingStatus = 'success';
+        } else {
+          note.embeddingStatus = 'failed';
+        }
+      } catch (error) {
+        note.embeddingStatus = 'failed';
+      }
+    }
+    
+    await note.save();
+    const populatedNote = await note.populate(['tags', 'collections']);
+    res.json(populatedNote);
+    
+  } catch (error) {
+    console.error('Update note error:', error);
+    res.status(500).json({ message: 'Cập nhật thất bại' });
+  }
+};
 
-  return success(res, { note, relatedNotes });
-}
-
-function updateNote(req, res) {
-  return success(res, {
-    id: req.params.id,
-    ...req.body,
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-function deleteNote(req, res) {
-  return success(res, { id: req.params.id, deleted: true });
-}
-
-// --- Tag ---
-function createTag(req, res) {
-  const { name } = req.body || {};
-  if (!name) return fail(res, 'VALIDATION_ERROR', 'Thiếu tên thẻ', 422);
-  return success(res, { id: 'tag-' + Date.now(), name, color: '#6366f1', source: 'manual' }, 201);
-}
-function updateTag(req, res) {
-  return success(res, { id: req.params.id, ...req.body });
-}
-function deleteTag(req, res) {
-  return success(res, { id: req.params.id, deleted: true });
-}
-
-// --- Collection ---
-function createCollection(req, res) {
-  const { name } = req.body || {};
-  if (!name) return fail(res, 'VALIDATION_ERROR', 'Thiếu tên bộ sưu tập', 422);
-  return success(res, { id: 'col-' + Date.now(), name, description: req.body.description || '' }, 201);
-}
-function updateCollection(req, res) {
-  return success(res, { id: req.params.id, ...req.body });
-}
-function deleteCollection(req, res) {
-  return success(res, { id: req.params.id, deleted: true });
-}
-
-module.exports = {
-  createNote,
-  getNotes,
-  getNoteWithRelated,
-  updateNote,
-  deleteNote,
-  createTag,
-  updateTag,
-  deleteTag,
-  createCollection,
-  updateCollection,
-  deleteCollection,
+// Delete note
+export const deleteNote = async (req, res) => {
+  try {
+    const note = await Note.findById(req.params.id);
+    
+    if (!note) {
+      return res.status(404).json({ message: 'Không tìm thấy ghi chú' });
+    }
+    
+    if (note.userId.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Không có quyền' });
+    }
+    
+    await note.deleteOne();
+    res.json({ message: 'Xóa ghi chú thành công' });
+    
+  } catch (error) {
+    console.error('Delete note error:', error);
+    res.status(500).json({ message: 'Xóa thất bại' });
+  }
 };
