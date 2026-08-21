@@ -1,30 +1,50 @@
-const jwt = require('jsonwebtoken');
-const { fail } = require('../utils/response');
+import jwt from 'jsonwebtoken';
+import Account from '../models/Account.js';
+import dotenv from 'dotenv';
 
-function requireAuth(req, res, next) {
-  const authHeader = req.header('Authorization') || '';
-  const [scheme, token] = authHeader.split(' ');
+dotenv.config();
 
-  if (scheme !== 'Bearer' || !token) {
-    return fail(res, 'UNAUTHORIZED', 'Chưa đăng nhập hoặc thiếu token', 401);
+export const protect = async (req, res, next) => {
+  let token;
+  
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
   }
-
+  
+  if (!token) {
+    return res.status(401).json({ message: 'Không có token xác thực' });
+  }
+  
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = { id: payload.userId, role: payload.role };
-    next();
-  } catch (err) {
-    return fail(res, 'UNAUTHORIZED', 'Token không hợp lệ hoặc đã hết hạn', 401);
-  }
-}
-
-function requireRole(...allowedRoles) {
-  return (req, res, next) => {
-    if (!req.user || !allowedRoles.includes(req.user.role)) {
-      return fail(res, 'FORBIDDEN', 'Tài khoản không đủ quyền truy cập', 403);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const account = await Account.findById(decoded.id).select('-password');
+    
+    if (!account) {
+      return res.status(401).json({ message: 'Token không hợp lệ' });
     }
+    
+    req.user = {
+      id: account._id,
+      email: account.email,
+      role: account.role
+    };
     next();
-  };
-}
+  } catch (error) {
+    console.error('Auth middleware error:', error);
+    return res.status(401).json({ message: 'Token không hợp lệ' });
+  }
+};
 
-module.exports = { requireAuth, requireRole };
+export const admin = async (req, res, next) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Yêu cầu quyền Admin' });
+  }
+  next();
+};
+
+export const staff = async (req, res, next) => {
+  if (req.user.role !== 'staff' && req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Yêu cầu quyền Staff' });
+  }
+  next();
+};

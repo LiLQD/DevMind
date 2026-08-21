@@ -9,13 +9,11 @@ export const register = async (req, res) => {
   try {
     const { email, password, name } = req.body;
     
-    // Check if user exists
     const existing = await Account.findOne({ email });
     if (existing) {
       return res.status(400).json({ message: 'Email đã tồn tại' });
     }
     
-    // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
     
@@ -28,7 +26,6 @@ export const register = async (req, res) => {
     
     await account.save();
     
-    // Generate JWT
     const token = jwt.sign(
       { id: account._id, role: account.role },
       process.env.JWT_SECRET,
@@ -60,13 +57,11 @@ export const login = async (req, res) => {
       return res.status(401).json({ message: 'Email hoặc mật khẩu không đúng' });
     }
     
-    // Check password
     const valid = await bcrypt.compare(password, account.password);
     if (!valid) {
       return res.status(401).json({ message: 'Email hoặc mật khẩu không đúng' });
     }
     
-    // Generate JWT
     const token = jwt.sign(
       { id: account._id, role: account.role },
       process.env.JWT_SECRET,

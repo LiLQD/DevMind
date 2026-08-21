@@ -2,7 +2,7 @@
   "name": "devmind-backend",
   "version": "1.0.0",
   "description": "DevMind backend",
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",

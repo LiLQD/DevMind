@@ -11,15 +11,18 @@ import { protect } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
-// All routes require authentication
+// All note routes require authentication
 router.use(protect);
 
+// Note CRUD
 router.route('/')
   .get(getNotes)
   .post(createNote);
 
+// Semantic search
 router.post('/search', semanticSearch);
 
+// Individual note operations
 router.route('/:id')
   .get(getNote)
   .put(updateNote)

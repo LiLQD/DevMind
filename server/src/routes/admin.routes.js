@@ -1,20 +1,46 @@
-const express = require('express');
-const adminController = require('../controllers/admin.controller');
-const { requireAuth, requireRole } = require('../middleware/auth.middleware');
+import express from 'express';
+import { protect, admin } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
-// Router này được mount với tiền tố "/admin" ở app.js (app.use('/admin', adminRoutes))
-// nên router.use() ở đây CHỈ áp dụng cho các request bắt đầu bằng /admin, không rò
-// sang các route khác - khác với cách làm cũ (mount ở root) từng gây lỗi 403 nhầm
-// cho cả những đường dẫn không tồn tại.
-router.use(requireAuth, requireRole('administrator'));
 
-router.get('/accounts', adminController.getAccounts);
-router.put('/accounts/:id/lock', adminController.lockAccount);
-router.put('/accounts/:id/unlock', adminController.unlockAccount);
-router.delete('/accounts/:id', adminController.deleteAccount);
-router.get('/audit-log', adminController.getAuditLog);
-router.get('/stats', adminController.getStats);
-router.put('/ai-provider-config', adminController.configureAIProvider);
+// All admin routes require authentication and admin role
+router.use(protect);
+router.use(admin);
 
-module.exports = router;
+// Get all users
+router.get('/users', (req, res) => {
+  // TODO: Implement
+  res.json({ message: 'Admin - Get all users' });
+});
+
+// Lock user account
+router.put('/users/:id/lock', (req, res) => {
+  // TODO: Implement
+  res.json({ message: 'Admin - Lock user' });
+});
+
+// Unlock user account
+router.put('/users/:id/unlock', (req, res) => {
+  // TODO: Implement
+  res.json({ message: 'Admin - Unlock user' });
+});
+
+// Delete user
+router.delete('/users/:id', (req, res) => {
+  // TODO: Implement
+  res.json({ message: 'Admin - Delete user' });
+});
+
+// Get audit logs
+router.get('/audit-logs', (req, res) => {
+  // TODO: Implement
+  res.json({ message: 'Admin - Get audit logs' });
+});
+
+// Get system stats
+router.get('/stats', (req, res) => {
+  // TODO: Implement
+  res.json({ message: 'Admin - Get stats' });
+});
+
+export default router;

@@ -1,9 +1,29 @@
-// src/models/AuditLog.js
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
+
 const auditLogSchema = new mongoose.Schema({
-  adminId: { type: mongoose.Schema.Types.ObjectId, ref: 'Account', required: true, index: true },
-  action: { type: String, enum: ['lock_account', 'unlock_account', 'delete_account'], required: true },
-  targetAccountId: { type: mongoose.Schema.Types.ObjectId, ref: 'Account', required: true },
-  timestamp: { type: Date, default: Date.now },
-});
-module.exports = mongoose.model('AuditLog', auditLogSchema);
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Account',
+    required: true
+  },
+  action: {
+    type: String,
+    required: true
+  },
+  resource: {
+    type: String,
+    required: true
+  },
+  details: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
+  },
+  ip: {
+    type: String
+  }
+}, { timestamps: true });
+
+auditLogSchema.index({ userId: 1, createdAt: -1 });
+
+const AuditLog = mongoose.model('AuditLog', auditLogSchema);
+export default AuditLog;

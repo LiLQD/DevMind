@@ -1,9 +1,19 @@
-require('dotenv').config();
-const app = require('./app');
-const connectDB = require('./config/db');
+import dotenv from 'dotenv';
+import app from './app.js';
+import mongoose from 'mongoose';
 
-const PORT = process.env.PORT || 4000;
+dotenv.config();
 
-connectDB().then(() => {
-  app.listen(PORT, () => console.log(`Backend chạy tại http://localhost:${PORT}`));
-});
+const PORT = process.env.PORT || 8080;
+
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => {
+    console.log('MongoDB connected');
+    app.listen(PORT, () => {
+      console.log(`Backend chạy tại http://localhost:${PORT}`);
+    });
+  })
+  .catch((error) => {
+    console.error('MongoDB connection error:', error);
+    process.exit(1);
+  });

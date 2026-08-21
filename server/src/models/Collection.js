@@ -1,8 +1,23 @@
-// src/models/Collection.js
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
+
 const collectionSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'Account', required: true, index: true },
-  name: { type: String, required: true, maxlength: 100 },
-  description: String,
-}, { timestamps: { createdAt: true, updatedAt: false } });
-module.exports = mongoose.model('Collection', collectionSchema);
+  name: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  description: {
+    type: String,
+    default: ''
+  },
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Account',
+    required: true
+  }
+}, { timestamps: true });
+
+collectionSchema.index({ userId: 1, name: 1 }, { unique: true });
+
+const Collection = mongoose.model('Collection', collectionSchema);
+export default Collection;

@@ -1,10 +1,11 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+// Cosine Similarity  
 export function cosineSimilarity(vecA, vecB) {
   if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
   
@@ -18,11 +19,32 @@ export function cosineSimilarity(vecA, vecB) {
 
 export async function generateEmbedding(text) {
   try {
-    const model = genAI.getGenerativeModel({ model: 'embedding-001' });
-    const result = await model.embedContent(text);
-    return result.embedding.values;
+    const response = await genAI.models.embedContent({
+      model: 'gemini-embedding-001',
+      contents: text,
+      config: {
+        taskType: 'RETRIEVAL_DOCUMENT',
+      },
+    });
+    return response.embeddings?.[0]?.values || null;
   } catch (error) {
     console.error('Embedding generation failed:', error);
+    return null;
+  }
+}
+
+export async function generateQueryEmbedding(text) {
+  try {
+    const response = await genAI.models.embedContent({
+      model: 'gemini-embedding-001',
+      contents: text,
+      config: {
+        taskType: 'RETRIEVAL_QUERY',
+      },
+    });
+    return response.embeddings?.[0]?.values || null;
+  } catch (error) {
+    console.error('Query embedding generation failed:', error);
     return null;
   }
 }

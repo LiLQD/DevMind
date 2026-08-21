@@ -1,10 +1,20 @@
-// src/models/Tag.js
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
+
 const tagSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'Account', required: true, index: true },
-  name: { type: String, required: true },
-  color: { type: String, default: '#6366f1' },
-  source: { type: String, enum: ['manual', 'ai_suggested'], default: 'manual' },
-}, { timestamps: { createdAt: true, updatedAt: false } });
+  name: {
+    type: String,
+    required: true,
+    trim: true,
+    unique: true
+  },
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Account',
+    required: true
+  }
+}, { timestamps: true });
+
 tagSchema.index({ userId: 1, name: 1 }, { unique: true });
-module.exports = mongoose.model('Tag', tagSchema);
+
+const Tag = mongoose.model('Tag', tagSchema);
+export default Tag;

@@ -1,16 +1,28 @@
-const express = require('express');
-const staffController = require('../controllers/staff.controller');
-const { requireAuth, requireRole } = require('../middleware/auth.middleware');
+import express from 'express';
+import { protect, staff } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
-// Mount với tiền tố "/staff" ở app.js - lý do giống admin.routes.js
-router.use(requireAuth, requireRole('staff', 'administrator'));
 
-router.get('/accounts/:id', staffController.getAccountInfo);
-router.get('/tickets', staffController.getTickets);
-router.put('/tickets/:id', staffController.updateTicket);
-router.get('/moderation-queue', staffController.getModerationQueue);
-router.put('/moderation-queue/:id/approve', staffController.approveContent);
-router.put('/moderation-queue/:id/reject', staffController.rejectContent);
+// All staff routes require authentication and staff role
+router.use(protect);
+router.use(staff);
 
-module.exports = router;
+// Get user details
+router.get('/users/:id', (req, res) => {
+  // TODO: Implement
+  res.json({ message: 'Staff - Get user details' });
+});
+
+// Handle support requests
+router.post('/support', (req, res) => {
+  // TODO: Implement
+  res.json({ message: 'Staff - Handle support' });
+});
+
+// Moderate content
+router.post('/moderate/:id', (req, res) => {
+  // TODO: Implement
+  res.json({ message: 'Staff - Moderate content' });
+});
+
+export default router;
