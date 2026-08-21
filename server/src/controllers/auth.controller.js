@@ -1,57 +1,115 @@
-const { success, fail } = require('../utils/response');
-const authService = require('../services/auth.service');
+import Account from '../models/Account.js';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
 
-async function register(req, res) {
-  const { email, password } = req.body || {};
-  if (!email || !password) {
-    return fail(res, 'VALIDATION_ERROR', 'Thiếu email hoặc mật khẩu', 422);
-  }
+dotenv.config();
 
+export const register = async (req, res) => {
   try {
-    const account = await authService.register(email, password);
-    return success(res, account, 201);
-  } catch (err) {
-    if (err.code === 'EMAIL_EXISTS') {
-      return fail(res, err.code, err.message, 409);
+    const { email, password, name } = req.body;
+    
+    // Check if user exists
+    const existing = await Account.findOne({ email });
+    if (existing) {
+      return res.status(400).json({ message: 'Email đã tồn tại' });
     }
-    console.error('register error:', err);
-    return fail(res, 'INTERNAL_ERROR', 'Có lỗi xảy ra, vui lòng thử lại', 500);
+    
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    
+    const account = new Account({
+      email,
+      password: hashedPassword,
+      name,
+      role: 'user'
+    });
+    
+    await account.save();
+    
+    // Generate JWT
+    const token = jwt.sign(
+      { id: account._id, role: account.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    
+    res.status(201).json({
+      token,
+      user: {
+        id: account._id,
+        email: account.email,
+        name: account.name,
+        role: account.role
+      }
+    });
+    
+  } catch (error) {
+    console.error('Register error:', error);
+    res.status(500).json({ message: 'Đăng ký thất bại' });
   }
-}
+};
 
-async function login(req, res) {
-  const { email, password } = req.body || {};
-  if (!email || !password) {
-    return fail(res, 'VALIDATION_ERROR', 'Thiếu email hoặc mật khẩu', 422);
-  }
-
+export const login = async (req, res) => {
   try {
-    const result = await authService.login(email, password);
-    return success(res, result);
-  } catch (err) {
-    if (err.code === 'INVALID_CREDENTIALS') {
-      return fail(res, err.code, err.message, 401);
+    const { email, password } = req.body;
+    
+    const account = await Account.findOne({ email });
+    if (!account) {
+      return res.status(401).json({ message: 'Email hoặc mật khẩu không đúng' });
     }
-    if (err.code === 'ACCOUNT_LOCKED') {
-      return fail(res, err.code, err.message, 403);
+    
+    // Check password
+    const valid = await bcrypt.compare(password, account.password);
+    if (!valid) {
+      return res.status(401).json({ message: 'Email hoặc mật khẩu không đúng' });
     }
-    console.error('login error:', err);
-    return fail(res, 'INTERNAL_ERROR', 'Có lỗi xảy ra, vui lòng thử lại', 500);
+    
+    // Generate JWT
+    const token = jwt.sign(
+      { id: account._id, role: account.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    
+    res.json({
+      token,
+      user: {
+        id: account._id,
+        email: account.email,
+        name: account.name,
+        role: account.role
+      }
+    });
+    
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Đăng nhập thất bại' });
   }
-}
+};
 
-function logout(req, res) {
-  return success(res, { message: 'Đã đăng xuất' });
-}
+export const getProfile = async (req, res) => {
+  try {
+    const account = await Account.findById(req.user.id).select('-password');
+    res.json(account);
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ message: 'Lỗi lấy thông tin' });
+  }
+};
 
-function updateProfile(req, res) {
-  const updates = req.body || {};
-  return success(res, {
-    id: req.user.id,
-    email: updates.email || 'user@example.com',
-    role: req.user.role,
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-module.exports = { register, login, logout, updateProfile };
+export const updateProfile = async (req, res) => {
+  try {
+    const { name } = req.body;
+    const account = await Account.findByIdAndUpdate(
+      req.user.id,
+      { name },
+      { new: true }
+    ).select('-password');
+    res.json(account);
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ message: 'Cập nhật thất bại' });
+  }
+};
