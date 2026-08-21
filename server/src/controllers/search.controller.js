@@ -1,27 +1,105 @@
-const { success, fail } = require('../utils/response');
+import Note from '../models/Note.js';
+import SearchLog from '../models/SearchLog.js';
+import { generateEmbedding, cosineSimilarity } from '../services/embedding.service.js';
 
-// STUB SearchController - khớp pseudocode SemanticSearch (mục 3.3.1) và
-// sequence diagram "Tìm kiếm ngữ nghĩa" (mục 2.7.2).
-
-function search(req, res) {
-  const { query } = req.body || {};
-
-  if (!query || !query.trim()) {
-    return fail(res, 'EMPTY_QUERY', 'Vui lòng nhập từ khóa', 422);
+// Semantic search
+export const semanticSearch = async (req, res) => {
+  try {
+    const { query } = req.body;
+    const THRESHOLD = 0.65;
+    const TOP_K = 5;       
+    
+    if (!query || query.trim() === '') {
+      return res.status(400).json({ 
+        message: 'Vui lòng nhập từ khóa' // matches TC07
+      });
+    }
+    
+    // Generate embedding for query
+    let queryEmbedding;
+    try {
+      queryEmbedding = await generateEmbedding(query);
+      if (!queryEmbedding) {
+        return res.status(503).json({ 
+          message: 'Tìm kiếm tạm thời không khả dụng' // matches TC08
+        });
+      }
+    } catch (error) {
+      return res.status(503).json({ 
+        message: 'Tìm kiếm tạm thời không khả dụng'
+      });
+    }
+    
+    // Get notes with successful embedding
+    const notes = await Note.find({
+      userId: req.user.id,
+      embeddingStatus: 'success'
+    }).populate(['tags', 'collections']);
+    
+    if (notes.length === 0) {
+      return res.status(404).json({ 
+        message: 'Chưa có ghi chú phù hợp để tìm kiếm' // matches TC09
+      });
+    }
+    
+    // Calculate similarity
+    const scored = notes.map(note => ({
+      ...note.toObject(),
+      similarityScore: cosineSimilarity(queryEmbedding, note.embedding)
+    }));
+    
+    // Filter by threshold and sort
+    const filtered = scored
+      .filter(item => item.similarityScore >= THRESHOLD)
+      .sort((a, b) => b.similarityScore - a.similarityScore);
+    
+    if (filtered.length === 0) {
+      return res.status(404).json({ 
+        message: 'Không tìm thấy kết quả phù hợp' // matches TC10
+      });
+    }
+    
+    // Get Top-K results
+    const results = filtered.slice(0, TOP_K);
+    
+    // Save search log
+    try {
+      const searchLog = new SearchLog({
+        userId: req.user.id,
+        query: query,
+        results: results.map(r => r._id),
+        resultCount: results.length,
+        topScores: results.map(r => r.similarityScore)
+      });
+      await searchLog.save();
+    } catch (logError) {
+      console.error('Failed to save search log:', logError);
+      // Don't fail the search if logging fails
+    }
+    
+    res.json({
+      results,
+      totalFound: filtered.length,
+      returned: results.length
+    });
+    
+  } catch (error) {
+    console.error('Semantic search error:', error);
+    res.status(500).json({ message: 'Lỗi tìm kiếm' });
   }
+};
 
-  // Nhánh lỗi AI ở sequence diagram: demo bằng query đặc biệt
-  if (query === '__aifail') {
-    return fail(res, 'AI_SERVICE_UNAVAILABLE', 'Tìm kiếm tạm thời không khả dụng', 503);
+// Get search history
+export const getSearchHistory = async (req, res) => {
+  try {
+    const logs = await SearchLog.find({ userId: req.user.id })
+      .sort({ timestamp: -1 })
+      .limit(20)
+      .populate('results', 'title');
+    
+    res.json(logs);
+  } catch (error) {
+    console.error('Get search history error:', error);
+    res.status(500).json({ message: 'Lỗi lấy lịch sử' });
   }
-
-  // Kết quả giả lập - cố ý dùng từ khóa KHÁC với nội dung gốc của note-001
-  // ("xử lý request bị trùng lặp" thay vì "idempotency") để thể hiện đúng
-  // giá trị của semantic search khi demo cho thầy.
-  return success(res, [
-    { noteId: 'note-001', title: 'Fix double submit bug', score: 0.89 },
-    { noteId: 'note-003', title: 'Rate limit API bằng token bucket', score: 0.74 },
-  ]);
-}
-
-module.exports = { search };
+};
