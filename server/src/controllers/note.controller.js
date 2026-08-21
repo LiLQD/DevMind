@@ -90,10 +90,9 @@ export const getNote = async (req, res) => {
     }
     
     // Check ownership
-    if (note.userId.toString() !== req.user.id) {
-      return res.status(403).json({ message: 'Không có quyền truy cập' });
+    if (note.userId.toString() !== req.user.id.toString()) {
+    return res.status(403).json({ message: 'Không có quyền truy cập' });
     }
-    
     // Get related notes if embedding exists 
     let relatedNotes = [];
     if (note.embeddingStatus === 'success' && note.embedding) {
