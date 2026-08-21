@@ -9,17 +9,33 @@ import staffRoutes from './routes/staff.routes.js';
 
 dotenv.config();
 
+console.log('Configuring Express app...');
+
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/notes', noteRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/staff', staffRoutes);
+// Logging middleware
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  next();
+});
+
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    message: 'DevMind API v1.0',
+    status: 'running',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth/register',
+      login: '/api/auth/login',
+      notes: '/api/notes'
+    }
+  });
+});
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -30,15 +46,38 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// API Routes
+console.log('Mounting routes...');
+app.use('/api/auth', authRoutes);
+app.use('/api/notes', noteRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/staff', staffRoutes);
+console.log('Routes mounted');
+
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({ message: 'Route not found' });
+  console.log(`404: ${req.method} ${req.url}`);
+  res.status(404).json({ 
+    success: false,
+    error: {
+      code: 'NOT_FOUND',
+      message: `Không tìm thấy endpoint ${req.method} ${req.url}`
+    }
+  });
 });
 
 // Error handler
 app.use((err, req, res, next) => {
   console.error('Error:', err);
-  res.status(500).json({ message: 'Internal server error' });
+  res.status(500).json({ 
+    success: false,
+    error: {
+      code: 'INTERNAL_ERROR',
+      message: err.message || 'Internal server error'
+    }
+  });
 });
+
+console.log('App configured');
 
 export default app;
