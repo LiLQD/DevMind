@@ -1,3 +1,11 @@
+import { webcrypto } from 'node:crypto';
+
+// Ensure the global WebCrypto API is available before mongoose/mongodb
+// attempt to use it during the SCRAM-SHA-256 auth handshake.
+if (!globalThis.crypto) {
+  globalThis.crypto = webcrypto;
+}
+
 import dotenv from 'dotenv';
 import app from './app.js';
 import mongoose from 'mongoose';
