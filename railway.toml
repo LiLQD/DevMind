@@ -1,0 +1,13 @@
+[build]
+  builder = "NIXPACKS"
+  buildCommand = "cd server && npm install"
+  watchPaths = ["server"]
+
+[deploy]
+  startCommand = "cd server && node src/server.js"
+  healthcheckPath = "/api/health"
+  port = 8080
+
+[service]
+  name = "devmind-backend"
+  rootDir = "server"
