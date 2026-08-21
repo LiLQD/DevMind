@@ -1,6 +1,8 @@
 {
   "build": {
-    "builder": "NIXPACKS"
+    "builder": "NIXPACKS",
+    "buildCommand": "npm install",
+    "installCommand": "npm install"
   },
   "deploy": {
     "startCommand": "node src/server.js",
