@@ -34,6 +34,9 @@ function App() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [query, setQuery] = useState('');
+  const [tagInput, setTagInput] = useState(''); // comma-separated tag names
+  const [selectedTagFilter, setSelectedTagFilter] = useState(null); // tag ID for filtering
+  const [allTags, setAllTags] = useState([]); // all user tags
 
   const searchInputRef = useRef(null);
   const notificationTimerRef = useRef(null);
@@ -114,14 +117,64 @@ function App() {
     setSearchResults([]);
     setIsSearching(false);
     setQuery('');
+    setAllTags([]);
+    setSelectedTagFilter(null);
   };
 
+  // ---- Tags ----
+  const fetchAllTags = async () => {
+    if (!token) return;
+    try {
+      const data = await apiRequest('/tags');
+      setAllTags(Array.isArray(data) ? data : data.data || []);
+    } catch {
+      // ignore
+    }
+  };
+
+  const getOrCreateTag = async (name) => {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    // Check if tag already exists
+    const existing = allTags.find(t => t.name.toLowerCase() === trimmed.toLowerCase());
+    if (existing) return existing._id;
+    // Create new tag
+    try {
+      const data = await apiRequest('/tags', {
+        method: 'POST',
+        body: JSON.stringify({ name: trimmed }),
+      });
+      const newTag = data.tag || data.data || data;
+      setAllTags(prev => [...prev, newTag]);
+      return newTag._id;
+    } catch {
+      showNotification(`Failed to create tag "${trimmed}"`, 'error');
+      return null;
+    }
+  };
+
+  const parseTagInput = async (input) => {
+    if (!input.trim()) return [];
+    const names = input.split(',').map(s => s.trim()).filter(Boolean);
+    const tagIds = [];
+    for (const name of names) {
+      const id = await getOrCreateTag(name);
+      if (id) tagIds.push(id);
+    }
+    return tagIds;
+  };
+
+  // ---- Notes ----
   const fetchNotes = async () => {
     if (!token) return;
     setIsLoadingNotes(true);
 
     try {
-      const data = await apiRequest('/notes');
+      let url = '/notes';
+      if (selectedTagFilter) {
+        url += `?tagId=${selectedTagFilter}`;
+      }
+      const data = await apiRequest(url);
       setNotes(Array.isArray(data) ? data : data.notes || data.data || []);
     } catch {
       showNotification('Failed to load notes.', 'error');
@@ -141,16 +194,19 @@ function App() {
     setIsCreatingNote(true);
 
     try {
+      const tagIds = await parseTagInput(tagInput);
       await apiRequest('/notes', {
         method: 'POST',
         body: JSON.stringify({
           title: title.trim(),
           content: content.trim(),
+          tags: tagIds,
         }),
       });
 
       setTitle('');
       setContent('');
+      setTagInput('');
       await fetchNotes();
       showNotification('Note created.', 'success');
     } catch (err) {
@@ -165,6 +221,8 @@ function App() {
     setIsEditingNote(true);
     setTitle(note.title || '');
     setContent(note.content || '');
+    const tagNames = (note.tags || []).map(t => t.name || t).join(', ');
+    setTagInput(tagNames);
     window.requestAnimationFrame(() => {
       document.querySelector('#note-title')?.focus();
     });
@@ -174,6 +232,7 @@ function App() {
     setIsEditingNote(false);
     setTitle('');
     setContent('');
+    setTagInput('');
   };
 
   const updateNote = async (e) => {
@@ -187,11 +246,13 @@ function App() {
     setIsUpdatingNote(true);
 
     try {
+      const tagIds = await parseTagInput(tagInput);
       const data = await apiRequest(`/notes/${selectedNote._id}`, {
         method: 'PUT',
         body: JSON.stringify({
           title: title.trim(),
           content: content.trim(),
+          tags: tagIds,
         }),
       });
 
@@ -200,6 +261,7 @@ function App() {
       setIsEditingNote(false);
       setTitle('');
       setContent('');
+      setTagInput('');
       await fetchNotes();
       showNotification('Note updated.', 'success');
     } catch (err) {
@@ -247,7 +309,6 @@ function App() {
       const data = await apiRequest(`/notes/${id}`);
       const note = data.note || data.data || data;
       setSelectedNote(note);
-      setRelatedNotes([]);
       setRelatedNotes(data.relatedNotes || note.relatedNotes || []);
     } catch {
       showNotification('Failed to load note.', 'error');
@@ -257,6 +318,7 @@ function App() {
     }
   };
 
+  // ---- Search ----
   const handleSearch = async (e) => {
     e?.preventDefault();
 
@@ -297,6 +359,7 @@ function App() {
     setIsSearching(false);
   };
 
+  // ---- Effects ----
   useEffect(() => {
     const handleKeyDown = (e) => {
       const mod = e.ctrlKey || e.metaKey;
@@ -344,8 +407,11 @@ function App() {
   }, [deleteTarget, isSearching, isEditingNote, selectedNote]);
 
   useEffect(() => {
-    if (token) fetchNotes();
-  }, [token]);
+    if (token) {
+      fetchNotes();
+      fetchAllTags();
+    }
+  }, [token, selectedTagFilter]); // refetch notes when filter changes
 
   useEffect(() => {
     if (!selectedNote && isEditingNote) {
@@ -353,6 +419,7 @@ function App() {
     }
   }, [selectedNote, isEditingNote]);
 
+  // ---- Auth screen ----
   if (!token) {
     return (
       <div className="auth-page">
@@ -424,6 +491,7 @@ function App() {
     );
   }
 
+  // ---- Main app ----
   const displayNotes = isSearching ? searchResults : notes;
   const userLabel = user?.name || user?.email || 'Account';
 
@@ -433,6 +501,12 @@ function App() {
       <div className="skeleton-block skeleton-meta-sm" />
     </div>
   );
+
+  // Tag filter options
+  const tagFilterOptions = [
+    { value: '', label: 'All notes' },
+    ...allTags.map(t => ({ value: t._id, label: t.name })),
+  ];
 
   return (
     <div className={`app-shell ${theme === 'dark' ? 'theme-dark' : ''}`}>
@@ -481,11 +555,32 @@ function App() {
         <aside className="sidebar">
           <div className="notes-toolbar">
             <span>{isSearching ? `${displayNotes.length} matches` : 'Your notes'}</span>
-            {isSearching && (
-              <button type="button" className="text-btn" onClick={clearSearch}>
-                Clear
-              </button>
-            )}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              {!isSearching && (
+                <select
+                  value={selectedTagFilter || ''}
+                  onChange={(e) => setSelectedTagFilter(e.target.value || null)}
+                  style={{
+                    padding: '3px 8px',
+                    border: '1px solid var(--border)',
+                    borderRadius: '4px',
+                    background: 'var(--surface)',
+                    color: 'var(--text)',
+                    fontSize: '11px',
+                    maxWidth: '120px',
+                  }}
+                >
+                  {tagFilterOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              )}
+              {isSearching && (
+                <button type="button" className="text-btn" onClick={clearSearch}>
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="notes-list">
@@ -559,7 +654,11 @@ function App() {
 
                   <div className="note-item-bottom">
                     <span>{new Date(note.createdAt).toLocaleDateString()}</span>
-                    {note.tags?.[0] && <span className="note-chip">{note.tags[0]}</span>}
+                    {note.tags?.[0] && (
+                      <span className="note-chip">
+                        {typeof note.tags[0] === 'object' ? note.tags[0].name : note.tags[0]}
+                      </span>
+                    )}
                     {note.similarityScore != null && (
                       <span className="score-chip">
                         {Math.round(note.similarityScore * 100)}%
@@ -693,7 +792,9 @@ function App() {
                           <div className="related-main">
                             <span className="related-title">{item.title}</span>
                             {item.tags?.[0] && (
-                              <span className="note-chip">{item.tags[0]}</span>
+                              <span className="note-chip">
+                                {typeof item.tags[0] === 'object' ? item.tags[0].name : item.tags[0]}
+                              </span>
                             )}
                           </div>
 
@@ -738,12 +839,23 @@ function App() {
             <label className="form-field">
               <span>Title</span>
               <input
+                id="note-title"
                 type="text"
                 placeholder="Understanding idempotency…"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 maxLength={200}
                 required
+              />
+            </label>
+
+            <label className="form-field">
+              <span>Tags (comma separated)</span>
+              <input
+                type="text"
+                placeholder="react, hooks, optimization"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
               />
             </label>
 
