@@ -12,7 +12,7 @@ export const generalLimiter = rateLimit({
   message: { error: 'Too many requests. Please slow down.' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip, // Use IP as key
+  keyGenerator: rateLimit.ipKeyGenerator,
 });
 
 export const searchLimiter = rateLimit({
@@ -24,5 +24,5 @@ export const searchLimiter = rateLimit({
   message: { error: 'Search limit exceeded. Try again in an hour.' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip,
+  keyGenerator: rateLimit.ipKeyGenerator,
 });
