@@ -23,6 +23,10 @@ export default function NoteView({ selectedNote, relatedNotes, isLoadingNote, is
     );
   }
 
+  const collectionName = selectedNote.collection
+    ? (typeof selectedNote.collection === 'object' ? selectedNote.collection.name : selectedNote.collection)
+    : null;
+
   return (
     <main className="main-pane">
       <div className="note-view">
@@ -30,6 +34,11 @@ export default function NoteView({ selectedNote, relatedNotes, isLoadingNote, is
           <div>
             <div className="eyebrow">Note</div>
             <h1>{selectedNote.title}</h1>
+            {collectionName && (
+              <div style={{ marginTop: '4px', fontSize: '13px', color: 'var(--text-muted)' }}>
+                📁 {collectionName}
+              </div>
+            )}
           </div>
           <button type="button" className="danger-btn" onClick={onDeleteNote} disabled={deletingNoteId === selectedNote._id}>
             {deletingNoteId === selectedNote._id ? 'Deleting…' : 'Delete'}
@@ -73,6 +82,11 @@ export default function NoteView({ selectedNote, relatedNotes, isLoadingNote, is
                       <div className="related-main">
                         <span className="related-title">{item.title}</span>
                         {item.tags?.[0] && <span className="note-chip">{typeof item.tags[0] === 'object' ? item.tags[0].name : item.tags[0]}</span>}
+                        {item.collection && (
+                          <span className="note-chip">
+                            📁 {typeof item.collection === 'object' ? item.collection.name : item.collection}
+                          </span>
+                        )}
                       </div>
                       <div className="related-score">
                         <span className="score-track">

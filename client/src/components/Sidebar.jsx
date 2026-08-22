@@ -1,3 +1,4 @@
+import React from 'react';
 import NoteList from './NoteList';
 
 export default function Sidebar({
@@ -5,43 +6,40 @@ export default function Sidebar({
   selectedNoteId,
   isLoading,
   isSearching,
-  query,
-  setQuery,
-  onSearch,
-  onClearSearch,
   onViewNote,
   onEditNote,
   onDeleteNote,
-  searchInputRef,
-  isSearchingAI,
-  selectedTagFilter,
-  setSelectedTagFilter,
+  selectedCollectionFilter,
+  setSelectedCollectionFilter,
+  collections = [],
 }) {
   return (
     <aside className="sidebar">
       <div className="notes-toolbar">
-        <span>{isSearching ? `${notes.length} matches` : 'Your notes'}</span>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {isSearching && (
-            <button type="button" className="text-btn" onClick={onClearSearch}>Clear</button>
+        <span>
+          {isSearching ? `${notes.length} matches` : 'Your notes'}
+        </span>
+
+        <div className="sidebar-filters">
+          {!isSearching && collections.length > 0 && (
+            <select
+              aria-label="Filter notes by collection"
+              value={selectedCollectionFilter || ''}
+              onChange={(e) =>
+                setSelectedCollectionFilter(e.target.value || null)
+              }
+              className="collection-filter"
+            >
+              <option value="">All collections</option>
+
+              {collections.map((collection) => (
+                <option key={collection._id} value={collection._id}>
+                  {collection.name}
+                </option>
+              ))}
+            </select>
           )}
         </div>
-      </div>
-
-      <div className="sidebar-search">
-        <form onSubmit={onSearch} className="search-control">
-          <input
-            ref={searchInputRef}
-            type="text"
-            placeholder="Search by meaning…"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            className="search-input"
-          />
-          <button type="submit" className="search-submit" disabled={isSearchingAI}>
-            {isSearchingAI ? '…' : 'Search'}
-          </button>
-        </form>
       </div>
 
       <NoteList
@@ -51,8 +49,16 @@ export default function Sidebar({
         onViewNote={onViewNote}
         onEditNote={onEditNote}
         onDeleteNote={onDeleteNote}
-        emptyMessage={isSearching ? 'No notes matched your search.' : 'No notes yet.'}
-        emptyHint={isSearching ? 'Try describing the idea instead of remembering exact keywords.' : 'Create your first note to start building your knowledge base.'}
+        emptyMessage={
+          isSearching
+            ? 'No notes matched your search.'
+            : 'No notes yet.'
+        }
+        emptyHint={
+          isSearching
+            ? 'Try describing the idea instead of remembering exact keywords.'
+            : 'Create your first note to start building your knowledge base.'
+        }
       />
     </aside>
   );

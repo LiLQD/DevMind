@@ -9,8 +9,8 @@ import NoteView from './components/NoteView';
 import CreatePanel from './components/CreatePanel';
 import Notification from './components/Notification';
 import ConfirmModal from './components/ConfirmModal';
+import SearchBar from './components/SearchBar';
 
-// Constants
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
 
 function App() {
@@ -24,6 +24,12 @@ function App() {
   const [relatedNotes, setRelatedNotes] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+
+  // --- Collections & Tags ---
+  const [collections, setCollections] = useState([]);
+  const [selectedCollectionFilter, setSelectedCollectionFilter] = useState(null);
+  const [selectedCollectionId, setSelectedCollectionId] = useState('');
+  const [newCollectionName, setNewCollectionName] = useState('');
 
   // --- UI state ---
   const [theme, setTheme] = useState(localStorage.getItem('devmind-theme') || 'light');
@@ -71,7 +77,7 @@ function App() {
     localStorage.setItem('devmind-theme', theme);
   }, [theme]);
 
-  // --- API helper (passed down to components) ---
+  // --- API helper ---
   const apiRequest = async (endpoint, options = {}) => {
     const headers = {
       'Content-Type': 'application/json',
@@ -116,6 +122,7 @@ function App() {
     setSearchResults([]);
     setIsSearching(false);
     setQuery('');
+    setCollections([]);
   };
 
   // --- Data fetching ---
@@ -126,7 +133,7 @@ function App() {
       let url = '/notes';
       const params = new URLSearchParams();
       if (selectedTagFilter) params.append('tagId', selectedTagFilter);
-      // collection filter will be added later if we implement collections
+      if (selectedCollectionFilter) params.append('collectionId', selectedCollectionFilter);
       if (params.toString()) url += '?' + params.toString();
       const data = await apiRequest(url);
       setNotes(Array.isArray(data) ? data : data.notes || data.data || []);
@@ -137,7 +144,34 @@ function App() {
     }
   };
 
-  // --- Note CRUD (passed down) ---
+  const fetchCollections = async () => {
+    if (!token) return;
+    try {
+      const data = await apiRequest('/collections');
+      setCollections(Array.isArray(data) ? data : data.data || []);
+    } catch {
+      // ignore
+    }
+  };
+
+  const createCollection = async (name) => {
+    if (!name.trim()) return null;
+    try {
+      const data = await apiRequest('/collections', {
+        method: 'POST',
+        body: JSON.stringify({ name: name.trim() }),
+      });
+      const newCol = data.collection || data.data || data;
+      setCollections(prev => [...prev, newCol]);
+      showNotification('Collection created.', 'success');
+      return newCol;
+    } catch (err) {
+      showNotification(err.message, 'error');
+      return null;
+    }
+  };
+
+  // --- Note CRUD ---
   const createNote = async (e) => {
     e.preventDefault();
     if (!title.trim() || !content.trim()) {
@@ -146,13 +180,20 @@ function App() {
     }
     setIsCreatingNote(true);
     try {
+      const payload = {
+        title: title.trim(),
+        content: content.trim(),
+        tags: tagInput.split(',').map(s => s.trim()).filter(Boolean),
+      };
+      if (selectedCollectionId) payload.collection = selectedCollectionId;
       await apiRequest('/notes', {
         method: 'POST',
-        body: JSON.stringify({ title: title.trim(), content: content.trim() }),
+        body: JSON.stringify(payload),
       });
       setTitle('');
       setContent('');
       setTagInput('');
+      setSelectedCollectionId('');
       await fetchNotes();
       showNotification('Note created.', 'success');
     } catch (err) {
@@ -170,9 +211,15 @@ function App() {
     }
     setIsUpdatingNote(true);
     try {
+      const payload = {
+        title: title.trim(),
+        content: content.trim(),
+        tags: tagInput.split(',').map(s => s.trim()).filter(Boolean),
+      };
+      if (selectedCollectionId) payload.collection = selectedCollectionId;
       const data = await apiRequest(`/notes/${selectedNote._id}`, {
         method: 'PUT',
-        body: JSON.stringify({ title: title.trim(), content: content.trim() }),
+        body: JSON.stringify(payload),
       });
       const updated = data.note || data.data || data;
       setSelectedNote(updated);
@@ -180,6 +227,7 @@ function App() {
       setTitle('');
       setContent('');
       setTagInput('');
+      setSelectedCollectionId('');
       await fetchNotes();
       showNotification('Note updated.', 'success');
     } catch (err) {
@@ -262,7 +310,9 @@ function App() {
     setIsEditingNote(true);
     setTitle(note.title || '');
     setContent(note.content || '');
-    // TagInput will be handled later
+    const tags = (note.tags || []).map(t => t.name || t).join(', ');
+    setTagInput(tags);
+    setSelectedCollectionId(note.collection?._id || note.collection || '');
     window.requestAnimationFrame(() => document.querySelector('#note-title')?.focus());
   };
 
@@ -271,6 +321,7 @@ function App() {
     setTitle('');
     setContent('');
     setTagInput('');
+    setSelectedCollectionId('');
   };
 
   // --- Keyboard shortcuts ---
@@ -301,7 +352,12 @@ function App() {
   }, [deleteTarget, isSearching, isEditingNote, selectedNote]);
 
   // --- Effects ---
-  useEffect(() => { if (token) fetchNotes(); }, [token, selectedTagFilter]);
+  useEffect(() => {
+    if (token) {
+      fetchNotes();
+      fetchCollections();
+    }
+  }, [token, selectedTagFilter, selectedCollectionFilter]);
 
   // --- Auth screen ---
   if (!token) {
@@ -341,29 +397,35 @@ function App() {
           selectedNoteId={selectedNote?._id}
           isLoading={isLoadingNotes}
           isSearching={isSearching}
-          query={query}
-          setQuery={setQuery}
-          onSearch={handleSearch}
-          onClearSearch={clearSearch}
           onViewNote={viewNote}
           onEditNote={beginEditNote}
           onDeleteNote={setDeleteTarget}
-          searchInputRef={searchInputRef}
-          isSearchingAI={isSearchingAI}
-          selectedTagFilter={selectedTagFilter}
-          setSelectedTagFilter={setSelectedTagFilter}
-          // tags prop will be added later if we implement tags
+          collections={collections}
+          selectedCollectionFilter={selectedCollectionFilter}
+          setSelectedCollectionFilter={setSelectedCollectionFilter}
         />
 
-        <NoteView
-          selectedNote={selectedNote}
-          relatedNotes={relatedNotes}
-          isLoadingNote={isLoadingNote}
-          isLoadingRelated={isLoadingRelated}
-          onViewNote={viewNote}
-          onDeleteNote={() => setDeleteTarget(selectedNote)}
-          deletingNoteId={deletingNoteId}
-        />
+        <main className="main-pane">
+          <SearchBar
+            query={query}
+            setQuery={setQuery}
+            onSearch={handleSearch}
+            onClearSearch={clearSearch}
+            isSearching={isSearching}
+            isSearchingAI={isSearchingAI}
+            searchInputRef={searchInputRef}
+          />
+          
+          <NoteView
+            selectedNote={selectedNote}
+            relatedNotes={relatedNotes}
+            isLoadingNote={isLoadingNote}
+            isLoadingRelated={isLoadingRelated}
+            onViewNote={viewNote}
+            onDeleteNote={() => setDeleteTarget(selectedNote)}
+            deletingNoteId={deletingNoteId}
+          />
+        </main>
 
         <CreatePanel
           isEditing={isEditingNote}
@@ -377,6 +439,12 @@ function App() {
           onCancel={cancelEditNote}
           isSaving={isEditingNote ? isUpdatingNote : isCreatingNote}
           submitLabel={isEditingNote ? 'Save changes' : 'Save note'}
+          collections={collections}
+          selectedCollectionId={selectedCollectionId}
+          setSelectedCollectionId={setSelectedCollectionId}
+          newCollectionName={newCollectionName}
+          setNewCollectionName={setNewCollectionName}
+          onCreateCollection={createCollection}
         />
       </div>
 
