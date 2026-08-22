@@ -48,3 +48,36 @@ export async function generateQueryEmbedding(text) {
     return null;
   }
 }
+
+export async function generateQueryEmbedding(text) {
+  try {
+    const response = await genAI.models.embedContent({
+      model: 'gemini-embedding-001',
+      contents: text,
+      config: {
+        taskType: 'RETRIEVAL_QUERY',  // Important: different task type
+      },
+    });
+    return response.embeddings?.[0]?.values || null;
+  } catch (error) {
+    console.error('Query embedding generation failed:', error);
+    return null;
+  }
+}
+
+export function filterStopWords(text) {
+  // Simple stop-word filtering
+  const stopWords = new Set([
+    'the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i',
+    'it', 'for', 'not', 'on', 'with', 'he', 'as', 'you', 'do', 'at',
+    'this', 'but', 'his', 'by', 'from', 'they', 'we', 'say', 'her', 'she',
+    'or', 'an', 'will', 'my', 'one', 'all', 'would', 'there', 'their',
+    'about', 'if', 'can', 'when', 'use', 'what', 'which', 'how', 'get',
+    'your', 'just', 'like', 'so', 'then', 'some', 'could', 'see', 'time',
+    'other', 'than', 'into', 'them', 'these', 'make', 'more', 'way', 'first',
+  ]);
+  
+  return text.split(' ')
+    .filter(word => word.length > 2 && !stopWords.has(word.toLowerCase()))
+    .join(' ');
+}
