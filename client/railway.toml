@@ -1,0 +1,8 @@
+[build]
+  builder = "NIXPACKS"
+  buildCommand = "pnpm install && pnpm build"
+
+[deploy]
+  startCommand = "npx serve -s dist -l 3000"
+  port = 3000
+  healthcheckPath = "/"
