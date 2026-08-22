@@ -135,10 +135,9 @@ export const updateNote = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy ghi chú' });
     }
     
-    if (note.userId.toString() !== req.user.id) {
+    if (note.userId.toString() !== req.user.id.toString()) {
       return res.status(403).json({ message: 'Không có quyền' });
-    }
-    
+    } 
     // Update fields
     if (title) note.title = title;
     if (content) note.content = content;
@@ -180,10 +179,9 @@ export const deleteNote = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy ghi chú' });
     }
     
-    if (note.userId.toString() !== req.user.id) {
+    if (note.userId.toString() !== req.user.id.toString()) {
       return res.status(403).json({ message: 'Không có quyền' });
-    }
-    
+    } 
     await note.deleteOne();
     res.json({ message: 'Xóa ghi chú thành công' });
     
