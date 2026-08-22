@@ -16,7 +16,7 @@ function App() {
   const [isLoadingNotes, setIsLoadingNotes] = useState(false);
   const [isSearchingAI, setIsSearchingAI] = useState(false);
   const [isCreatingNote, setIsCreatingNote] = useState(false);
-  const [isDeletingNote, setIsDeletingNote] = useState(false);
+  const [deletingNoteId, setDeletingNoteId] = useState(null);
   const [isLoadingNote, setIsLoadingNote] = useState(false);
   const [isEditingNote, setIsEditingNote] = useState(false);
   const [isUpdatingNote, setIsUpdatingNote] = useState(false);
@@ -214,12 +214,13 @@ function App() {
   const deleteNote = async () => {
     if (!deleteTarget) return;
 
-    setIsDeletingNote(true);
+    const targetId = deleteTarget._id;
+    setDeletingNoteId(targetId);
 
     try {
-      await apiRequest(`/notes/${deleteTarget._id}`, { method: 'DELETE' });
+      await apiRequest(`/notes/${targetId}`, { method: 'DELETE' });
 
-      if (selectedNote?._id === deleteTarget._id) {
+      if (selectedNote?._id === targetId) {
         setSelectedNote(null);
         setRelatedNotes([]);
       }
@@ -230,7 +231,7 @@ function App() {
     } catch (err) {
       showNotification(err.message, 'error');
     } finally {
-      setIsDeletingNote(false);
+      setDeletingNoteId(null);
     }
   };
 
@@ -478,51 +479,6 @@ function App() {
 
       <div className="workspace">
         <aside className="sidebar">
-          <div className="sidebar-search">
-            <form onSubmit={handleSearch} className="search-form">
-              <label className="search-label" htmlFor="search-notes">
-                Search your notes
-              </label>
-
-              <div className="search-control search-control-large">
-                <textarea
-                  id="search-notes"
-                  ref={searchInputRef}
-                  placeholder="Describe what you remember… e.g. “How do I prevent duplicate requests when the client retries?”"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  className="search-input search-textarea"
-                  maxLength={1000}
-                  rows={3}
-                  autoComplete="off"
-                />
-
-                {query && (
-                  <button
-                    type="button"
-                    className="clear-search"
-                    aria-label="Clear search"
-                    onClick={clearSearch}
-                  >
-                    ×
-                  </button>
-                )}
-
-                <button type="submit" className="search-submit" disabled={isSearchingAI}>
-                  {isSearchingAI ? 'Searching…' : 'Search'}
-                </button>
-              </div>
-
-              <div className="search-meta">
-                <span>Natural language · up to 1,000 characters</span>
-                <div className="search-shortcuts">
-                  <span>⌘/Ctrl K</span>
-                  <span>Enter to search</span>
-                </div>
-              </div>
-            </form>
-          </div>
-
           <div className="notes-toolbar">
             <span>{isSearching ? `${displayNotes.length} matches` : 'Your notes'}</span>
             {isSearching && (
@@ -617,6 +573,52 @@ function App() {
         </aside>
 
         <main className="main-pane">
+          <div className="global-search">
+            <form onSubmit={handleSearch} className="global-search-form">
+              <div className="global-search-row">
+                <div className="global-search-input-wrap">
+                  <input
+                    id="search-notes"
+                    ref={searchInputRef}
+                    type="text"
+                    placeholder="Search by meaning… describe the problem, idea, or solution you remember."
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    className="global-search-input"
+                    maxLength={1000}
+                    autoComplete="off"
+                  />
+                  {query && (
+                    <button
+                      type="button"
+                      className="global-search-clear"
+                      aria-label="Clear search"
+                      onClick={clearSearch}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  className="search-submit global-search-submit"
+                  disabled={isSearchingAI}
+                >
+                  {isSearchingAI ? 'Searching…' : 'Search'}
+                </button>
+              </div>
+
+              <div className="global-search-meta">
+                <span>Natural-language search · up to 1,000 characters</span>
+                <div className="search-shortcuts">
+                  <span><kbd>⌘/Ctrl K</kbd> focus</span>
+                  <span><kbd>Enter</kbd> search</span>
+                </div>
+              </div>
+            </form>
+          </div>
+
           {isLoadingNote ? (
             <div className="note-loading">
               <div className="skeleton-block skeleton-heading" />
@@ -636,9 +638,9 @@ function App() {
                   type="button"
                   className="danger-btn"
                   onClick={() => requestDeleteNote(selectedNote)}
-                  disabled={isDeletingNote}
+                  disabled={deletingNoteId === selectedNote?._id}
                 >
-                  {isDeletingNote ? 'Deleting…' : 'Delete'}
+                  {deletingNoteId === selectedNote?._id ? 'Deleting…' : 'Delete'}
                 </button>
               </div>
 
@@ -793,7 +795,7 @@ function App() {
                 type="button"
                 className="secondary-btn"
                 onClick={() => setDeleteTarget(null)}
-                disabled={isDeletingNote}
+                disabled={deletingNoteId === deleteTarget?._id}
               >
                 Cancel
               </button>
@@ -801,9 +803,9 @@ function App() {
                 type="button"
                 className="danger-solid-btn"
                 onClick={deleteNote}
-                disabled={isDeletingNote}
+                disabled={deletingNoteId === deleteTarget?._id}
               >
-                {isDeletingNote ? 'Deleting…' : 'Delete note'}
+                {deletingNoteId === deleteTarget?._id ? 'Deleting…' : 'Delete note'}
               </button>
             </div>
           </div>
