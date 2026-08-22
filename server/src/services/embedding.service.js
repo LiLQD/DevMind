@@ -39,22 +39,6 @@ export async function generateQueryEmbedding(text) {
       model: 'gemini-embedding-001',
       contents: text,
       config: {
-        taskType: 'RETRIEVAL_QUERY',
-      },
-    });
-    return response.embeddings?.[0]?.values || null;
-  } catch (error) {
-    console.error('Query embedding generation failed:', error);
-    return null;
-  }
-}
-
-export async function generateQueryEmbedding(text) {
-  try {
-    const response = await genAI.models.embedContent({
-      model: 'gemini-embedding-001',
-      contents: text,
-      config: {
         taskType: 'RETRIEVAL_QUERY',  // Important: different task type
       },
     });
