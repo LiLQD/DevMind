@@ -7,6 +7,7 @@ import noteRoutes from './routes/notes.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import staffRoutes from './routes/staff.routes.js';
 import tagRoutes from './routes/tag.routes.js';
+import collectionRoutes from './routes/collection.routes.js';
 
 import { generalLimiter, searchLimiter } from './middleware/rateLimiter.js';
 
@@ -62,6 +63,8 @@ app.use('/api/notes', noteRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/tags', tagRoutes);
+app.use('/api/collections', collectionRoutes);
+
 console.log('Routes mounted');
 
 // 404 handler
