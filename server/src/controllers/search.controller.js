@@ -6,7 +6,10 @@ import { generateEmbedding, cosineSimilarity } from '../services/embedding.servi
 export const semanticSearch = async (req, res) => {
   try {
     const { query } = req.body;
-    const THRESHOLD = 0.65;
+    const noteCount = await Note.countDocuments({ userId: req.user.id, embeddingStatus: 'success' });
+
+    // If few notes, require higher similarity
+    const THRESHOLD = noteCount < 10 ? 0.75 : 0.66;
     const TOP_K = 5;       
     
     if (!query || query.trim() === '') {
