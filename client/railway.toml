@@ -3,6 +3,6 @@
   buildCommand = "pnpm install && pnpm build"
 
 [deploy]
-  startCommand = "npx serve -s dist -l 3000"
+  startCommand = "npx serve -s dist -l 0.0.0.0:$PORT"
   port = 3000
   healthcheckPath = "/"
