@@ -312,10 +312,10 @@ function App() {
     setContent(note.content || '');
     const tags = (note.tags || []).map(t => t.name || t).join(', ');
     setTagInput(tags);
-    setSelectedCollectionId(note.collection?._id || note.collection || '');
+    const collectionId = note.collection?._id || note.collection || '';
+    setSelectedCollectionId(collectionId);
     window.requestAnimationFrame(() => document.querySelector('#note-title')?.focus());
   };
-
   const cancelEditNote = () => {
     setIsEditingNote(false);
     setTitle('');

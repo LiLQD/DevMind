@@ -8,20 +8,14 @@ export const createNote = async (req, res) => {
   try {
     const { title, content, tags, collections } = req.body;
     
-    // Validate input
     if (!title || !content) {
-      return res.status(400).json({ 
-        message: 'Thiếu title hoặc content' // "Missing title or content" - matches TC02
-      });
+      return res.status(400).json({ message: 'Thiếu title hoặc content' });
     }
     
     if (title.length > 200) {
-      return res.status(400).json({ 
-        message: 'Tiêu đề vượt quá 200 ký tự' // "Title exceeds 200 characters" - matches TC03
-      });
+      return res.status(400).json({ message: 'Tiêu đề vượt quá 200 ký tự' });
     }
     
-    // Create note with pending status 
     const note = new Note({
       title,
       content,
@@ -33,7 +27,6 @@ export const createNote = async (req, res) => {
     
     await note.save();
     
-    // Try to generate embedding asynchronously 
     try {
       const embedding = await generateEmbedding(content);
       if (embedding) {
@@ -44,7 +37,6 @@ export const createNote = async (req, res) => {
       }
       await note.save();
     } catch (aiError) {
-      // Note still saved even if AI fails 
       note.embeddingStatus = 'failed';
       await note.save();
       console.error('AI embedding failed but note saved:', aiError);
@@ -55,7 +47,7 @@ export const createNote = async (req, res) => {
     
   } catch (error) {
     console.error('Create note error:', error);
-    res.status(500).json({ message: 'Tạo ghi chú thất bại' }); // matches TC05
+    res.status(500).json({ message: 'Tạo ghi chú thất bại' });
   }
 };
 
@@ -79,39 +71,50 @@ export const getNotes = async (req, res) => {
   }
 };
 
-// Get single note with related suggestions 
+// Get single note with related suggestions
 export const getNote = async (req, res) => {
   try {
     const note = await Note.findById(req.params.id)
-      .populate(['tags', 'collections']);
+      .populate(['tags', 'collections']); // ✅ Populate tags & collection
     
     if (!note) {
       return res.status(404).json({ message: 'Không tìm thấy ghi chú' });
     }
     
-    // Check ownership
     if (note.userId.toString() !== req.user.id.toString()) {
-    return res.status(403).json({ message: 'Không có quyền truy cập' });
+      return res.status(403).json({ message: 'Không có quyền truy cập' });
     }
-    // Get related notes if embedding exists 
+    
+    // Get related notes if embedding exists
     let relatedNotes = [];
     if (note.embeddingStatus === 'success' && note.embedding) {
       const otherNotes = await Note.find({
         userId: req.user.id,
         _id: { $ne: note._id },
         embeddingStatus: 'success'
-      });
-      
+      }).populate(['tags', 'collections']); // ✅ Populate tags & collections
+
       const scored = otherNotes.map(n => ({
         ...n.toObject(),
         similarityScore: cosineSimilarity(note.embedding, n.embedding)
       }));
-      
+
       const THRESHOLD = 0.65;
-      relatedNotes = scored
+      const filtered = scored
         .filter(item => item.similarityScore >= THRESHOLD)
-        .sort((a, b) => b.similarityScore - a.similarityScore)
-        .slice(0, 5);
+        .sort((a, b) => b.similarityScore - a.similarityScore);
+
+      // Deduplicate by _id (keep highest score)
+      const seen = new Set();
+      const deduped = [];
+      for (const item of filtered) {
+        if (!seen.has(item._id)) {
+          seen.add(item._id);
+          deduped.push(item);
+        }
+      }
+
+      relatedNotes = deduped.slice(0, 5);
     }
     
     res.json({
@@ -137,14 +140,13 @@ export const updateNote = async (req, res) => {
     
     if (note.userId.toString() !== req.user.id.toString()) {
       return res.status(403).json({ message: 'Không có quyền' });
-    } 
-    // Update fields
+    }
+    
     if (title) note.title = title;
     if (content) note.content = content;
     if (tags) note.tags = tags;
     if (collections) note.collections = collections;
     
-    // If content changed, regenerate embedding
     if (content && content !== note.content) {
       note.embeddingStatus = 'pending';
       try {
@@ -181,7 +183,8 @@ export const deleteNote = async (req, res) => {
     
     if (note.userId.toString() !== req.user.id.toString()) {
       return res.status(403).json({ message: 'Không có quyền' });
-    } 
+    }
+    
     await note.deleteOne();
     res.json({ message: 'Xóa ghi chú thành công' });
     

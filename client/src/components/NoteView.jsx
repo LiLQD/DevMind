@@ -47,6 +47,15 @@ export default function NoteView({ selectedNote, relatedNotes, isLoadingNote, is
 
         <article className="note-content">{selectedNote.content}</article>
 
+        {/* Tags display */}
+        {selectedNote.tags && selectedNote.tags.length > 0 && (
+          <div style={{ marginTop: '12px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {selectedNote.tags.map(tag => (
+              <span key={tag._id} className="note-chip">{tag.name}</span>
+            ))}
+          </div>
+        )}
+
         <div className={`embedding-state ${selectedNote.embeddingStatus === 'failed' ? 'warning' : ''}`}>
           <span className="state-dot" />
           <span>
@@ -81,7 +90,9 @@ export default function NoteView({ selectedNote, relatedNotes, isLoadingNote, is
                     <button type="button" key={item._id} className="related-item" onClick={() => onViewNote(item._id)}>
                       <div className="related-main">
                         <span className="related-title">{item.title}</span>
-                        {item.tags?.[0] && <span className="note-chip">{typeof item.tags[0] === 'object' ? item.tags[0].name : item.tags[0]}</span>}
+                        {item.tags && item.tags.length > 0 && (
+                          <span className="note-chip">{item.tags[0].name}</span>
+                        )}
                         {item.collection && (
                           <span className="note-chip">
                             📁 {typeof item.collection === 'object' ? item.collection.name : item.collection}

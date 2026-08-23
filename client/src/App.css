@@ -1760,3 +1760,102 @@ button:disabled { opacity: 0.58; cursor: not-allowed; }
     align-items: flex-start;
   }
 }
+/* Collection filter in the sidebar toolbar */
+.collection-filter {
+  padding: 4px 28px 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 500;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2399a4b2' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.collection-filter:focus {
+  outline: 0;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+}
+
+.collection-filter option {
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* "+ New collection" button in create panel */
+.collection-new-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: var(--surface-muted);
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  color: var(--text-soft);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.collection-new-btn:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Collection quick-create inline buttons */
+.collection-create-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.collection-create-btn {
+  padding: 4px 14px;
+  font-size: 12px;
+  min-height: 32px;
+}
+
+.collection-cancel-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  min-height: 32px;
+}
+
+/* Collection badge in note items (already exists, but ensure it's styled) */
+.note-chip.collection-chip {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent-soft);
+}
+
+/* Dark theme overrides */
+:root[data-theme="dark"] .collection-filter {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7a8a' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+:root[data-theme="dark"] .collection-new-btn {
+  border-color: var(--border-strong);
+  color: var(--text-muted);
+}
+
+:root[data-theme="dark"] .collection-new-btn:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+:root[data-theme="dark"] .collection-chip {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
