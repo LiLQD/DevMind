@@ -1,6 +1,6 @@
 import Note from '../models/Note.js';
 import SearchLog from '../models/SearchLog.js';
-import { generateQueryEmbedding, cosineSimilarity, filterStopWords } from '../services/embedding.service.js';
+import { generateQueryEmbedding, cosineSimilarity } from '../services/embedding.service.js';
 
 export const semanticSearch = async (req, res) => {
   try {
@@ -11,7 +11,7 @@ export const semanticSearch = async (req, res) => {
       return res.status(400).json({ message: 'Vui lòng nhập từ khóa' });
     }
 
-    // 1. Get notes count for dynamic threshold
+    // 1. Count notes for threshold adjustment
     const noteCount = await Note.countDocuments({
       userId: req.user.id,
       embeddingStatus: 'success'
@@ -28,7 +28,7 @@ export const semanticSearch = async (req, res) => {
       return res.status(503).json({ message: 'Tìm kiếm tạm thời không khả dụng' });
     }
 
-    // 3. Fetch notes
+    // 3. Fetch all notes
     const notes = await Note.find({
       userId: req.user.id,
       embeddingStatus: 'success'
@@ -38,7 +38,7 @@ export const semanticSearch = async (req, res) => {
       return res.status(404).json({ message: 'Chưa có ghi chú phù hợp để tìm kiếm' });
     }
 
-    // 4. Prepare query keywords (stopword‑filtered)
+    // 4. Prepare stopwords and query keywords
     const stopWords = new Set([
       'the','be','to','of','and','a','in','that','have','i','it','for','not','on','with','he','as','you','do','at',
       'this','but','his','by','from','they','we','say','her','she','or','an','will','my','one','all','would','there',
@@ -48,12 +48,11 @@ export const semanticSearch = async (req, res) => {
     const queryWords = query.toLowerCase().split(/\s+/)
       .filter(w => w.length > 2 && !stopWords.has(w));
 
-    // 5. Score each note
-    let scored = notes.map(note => {
-      // Semantic similarity
+    // 5. Score each note (semantic and keyword separately)
+    const scored = notes.map(note => {
       const semanticScore = cosineSimilarity(queryEmbedding, note.embedding);
 
-      // Keyword matching (count how many query words appear in title+content)
+      // keyword ratio: proportion of query words that appear in title or content
       const noteText = (note.title + ' ' + note.content).toLowerCase();
       let matchedKeywords = 0;
       queryWords.forEach(word => {
@@ -61,88 +60,94 @@ export const semanticSearch = async (req, res) => {
       });
       const keywordRatio = queryWords.length > 0 ? matchedKeywords / queryWords.length : 0;
 
-      // Combined score: semantic 60%, keyword 40%
-      let combinedScore = semanticScore * 0.6 + keywordRatio * 0.4;
-
-      // Penalty: if query has meaningful words but none match → reduce by 40%
-      if (queryWords.length > 0 && keywordRatio === 0) {
-        combinedScore *= 0.6;
-      }
-
-      // Length penalty: shorter notes (< 30 words) get a 10% penalty
-      const wordCount = note.content.split(/\s+/).length;
-      if (wordCount < 30) {
-        combinedScore *= 0.9;
-      }
-
       return {
         ...note.toObject(),
         semanticScore,
         keywordRatio,
-        similarityScore: combinedScore
       };
     });
 
-    // 6. Remove notes that have zero similarity after penalties
-    scored = scored.filter(item => item.similarityScore > 0.1);
-
-    // 7. Dynamic threshold
+    // 6. Semantic threshold based on note count (more notes = lower threshold)
     let baseThreshold = 0.70;
     if (noteCount < 10) baseThreshold = 0.85;
     else if (noteCount < 20) baseThreshold = 0.80;
     else if (noteCount < 50) baseThreshold = 0.75;
     else baseThreshold = 0.70;
 
-    // 8. If all scores are close, raise the threshold further
-    if (scored.length > 0) {
-      const scores = scored.map(s => s.similarityScore);
-      const avgScore = scores.reduce((a,b) => a+b, 0) / scores.length;
-      const maxScore = Math.max(...scores);
-      const minScore = Math.min(...scores);
-      // If the spread is small (i.e., all scores are similar), raise threshold
-      if (maxScore - minScore < 0.15) {
-        baseThreshold = Math.max(baseThreshold, 0.80);
+    // Filter by semantic score
+    let semanticResults = scored.filter(item => item.semanticScore >= baseThreshold);
+
+    // Sort by semantic score descending
+    semanticResults.sort((a, b) => b.semanticScore - a.semanticScore);
+
+    // 7. (Optional) Tie‑breaker: reorder within groups where semantic scores are very close
+    //    Use keywordRatio to break ties. Group by consecutive differences < 0.05.
+    if (semanticResults.length > 0) {
+      const groups = [];
+      let currentGroup = [semanticResults[0]];
+
+      for (let i = 1; i < semanticResults.length; i++) {
+        // Compare with the last element of the current group (not the first)
+        const lastScore = currentGroup[currentGroup.length - 1].semanticScore;
+        const currentScore = semanticResults[i].semanticScore;
+        if (lastScore - currentScore < 0.05) {
+          currentGroup.push(semanticResults[i]);
+        } else {
+          groups.push(currentGroup);
+          currentGroup = [semanticResults[i]];
+        }
       }
-      // If the average is already high, use a higher threshold to filter more
-      if (avgScore > 0.75) {
-        baseThreshold = Math.max(baseThreshold, 0.78);
+      if (currentGroup.length > 0) groups.push(currentGroup);
+
+      // Sort each group by keywordRatio descending, then flatten
+      const reordered = [];
+      for (const group of groups) {
+        group.sort((a, b) => b.keywordRatio - a.keywordRatio);
+        reordered.push(...group);
       }
+      semanticResults = reordered;
     }
 
-    // 9. Filter and sort
-    const filtered = scored
-      .filter(item => item.similarityScore >= baseThreshold)
-      .sort((a, b) => b.similarityScore - a.similarityScore);
+    // Take top K
+    let finalResults = semanticResults.slice(0, TOP_K);
 
-    if (filtered.length === 0) {
+    // 8. Graceful fallback: if semantic filter returned nothing, use keyword-only ranking
+    if (finalResults.length === 0) {
+      // Sort all notes by keywordRatio descending
+      const keywordSorted = [...scored].sort((a, b) => b.keywordRatio - a.keywordRatio);
+      // Only take those with at least some keyword match
+      const keywordCandidates = keywordSorted.filter(item => item.keywordRatio > 0);
+      finalResults = keywordCandidates.slice(0, TOP_K);
+    }
+
+    if (finalResults.length === 0) {
       return res.status(404).json({
         message: 'Không tìm thấy kết quả phù hợp',
-        suggestion: 'Try using more specific keywords or add more notes'
+        suggestion: 'Thử dùng từ khóa cụ thể hơn hoặc thêm ghi chú mới'
       });
     }
 
-    const results = filtered.slice(0, TOP_K);
-
-    // 10. Save search log (non‑blocking)
+    // 9. Save search log (store semantic scores for later analysis)
     try {
       const searchLog = new SearchLog({
         userId: req.user.id,
         query: query,
-        results: results.map(r => r._id),
-        resultCount: results.length,
-        topScores: results.map(r => r.similarityScore)
+        results: finalResults.map(r => r._id),
+        resultCount: finalResults.length,
+        topScores: finalResults.map(r => r.semanticScore), // keep semantic only
       });
       await searchLog.save();
     } catch (logError) {
       console.error('Failed to save search log:', logError);
     }
 
+    // 10. Return results (both scores available for client-side display if needed)
     res.json({
-      results,
-      totalFound: filtered.length,
-      returned: results.length,
+      results: finalResults,
+      totalFound: semanticResults.length,
+      returned: finalResults.length,
       threshold: baseThreshold,
-      noteCount: noteCount
+      noteCount: noteCount,
     });
 
   } catch (error) {
