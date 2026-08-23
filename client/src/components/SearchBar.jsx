@@ -45,8 +45,12 @@ export default function SearchBar({
       <div className="search-bar-meta">
         <span>Natural-language search · up to 1,000 characters</span>
         <div className="search-bar-shortcuts">
-          <span><kbd>⌘/Ctrl K</kbd> focus</span>
-          <span><kbd>Enter</kbd> search</span>
+          <span>
+            <kbd>⌘/Ctrl K</kbd> focus
+          </span>
+          <span>
+            <kbd>Enter</kbd> search
+          </span>
         </div>
       </div>
     </div>

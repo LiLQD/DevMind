@@ -1,4 +1,24 @@
-export default function NoteView({ selectedNote, relatedNotes, isLoadingNote, isLoadingRelated, onViewNote, onDeleteNote, deletingNoteId }) {
+import React from 'react';
+
+// Helper to format date as "Aug 23, 2026"
+function formatDate(dateString) {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+export default function NoteView({
+  selectedNote,
+  relatedNotes,
+  isLoadingNote,
+  isLoadingRelated,
+  onViewNote,
+  onDeleteNote,
+  deletingNoteId,
+}) {
   if (isLoadingNote) {
     return (
       <main className="main-pane">
@@ -24,47 +44,63 @@ export default function NoteView({ selectedNote, relatedNotes, isLoadingNote, is
   }
 
   const collectionName = selectedNote.collection
-    ? (typeof selectedNote.collection === 'object' ? selectedNote.collection.name : selectedNote.collection)
+    ? typeof selectedNote.collection === 'object'
+      ? selectedNote.collection.name
+      : selectedNote.collection
     : null;
 
   return (
     <main className="main-pane">
       <div className="note-view">
-        <div className="note-title-row">
+        {/* Header with title + metadata */}
+        <div className="note-header">
           <div>
             <div className="eyebrow">Note</div>
-            <h1>{selectedNote.title}</h1>
-            {collectionName && (
-              <div style={{ marginTop: '4px', fontSize: '13px', color: 'var(--text-muted)' }}>
-                📁 {collectionName}
-              </div>
-            )}
+            <h1 className="note-title">{selectedNote.title}</h1>
+            <div className="note-meta-line">
+              {collectionName && (
+                <span className="note-chip collection-chip">{collectionName}</span>
+              )}
+              <span className="note-date">{formatDate(selectedNote.createdAt)}</span>
+            </div>
           </div>
-          <button type="button" className="danger-btn" onClick={onDeleteNote} disabled={deletingNoteId === selectedNote._id}>
+          <button
+            type="button"
+            className="danger-btn"
+            onClick={onDeleteNote}
+            disabled={deletingNoteId === selectedNote._id}
+          >
             {deletingNoteId === selectedNote._id ? 'Deleting…' : 'Delete'}
           </button>
         </div>
 
+        {/* Note content */}
         <article className="note-content">{selectedNote.content}</article>
 
         {/* Tags display */}
         {selectedNote.tags && selectedNote.tags.length > 0 && (
-          <div style={{ marginTop: '12px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            {selectedNote.tags.map(tag => (
-              <span key={tag._id} className="note-chip">{tag.name}</span>
+          <div className="note-tags-row">
+            {selectedNote.tags.map((tag) => (
+              <span key={tag._id} className="note-chip">
+                {tag.name}
+              </span>
             ))}
           </div>
         )}
 
-        <div className={`embedding-state ${selectedNote.embeddingStatus === 'failed' ? 'warning' : ''}`}>
+        {/* Embedding status – text-only, no background */}
+        <div className="embedding-status">
           <span className="state-dot" />
           <span>
-            {selectedNote.embeddingStatus === 'success' ? 'Ready for semantic search' :
-             selectedNote.embeddingStatus === 'failed' ? 'Saved without embedding' :
-             'Embedding in progress'}
+            {selectedNote.embeddingStatus === 'success'
+              ? 'Ready for semantic search'
+              : selectedNote.embeddingStatus === 'failed'
+              ? 'Saved without embedding'
+              : 'Embedding in progress'}
           </span>
         </div>
 
+        {/* Related notes */}
         {(isLoadingRelated || relatedNotes.length > 0) && (
           <section className="related-section">
             <div className="section-heading">
@@ -84,18 +120,25 @@ export default function NoteView({ selectedNote, relatedNotes, isLoadingNote, is
               ) : relatedNotes.length === 0 ? (
                 <div className="related-empty">No closely related notes found.</div>
               ) : (
-                relatedNotes.map(item => {
+                relatedNotes.map((item) => {
                   const score = Math.round((item.similarityScore || 0) * 100);
                   return (
-                    <button type="button" key={item._id} className="related-item" onClick={() => onViewNote(item._id)}>
+                    <button
+                      type="button"
+                      key={item._id}
+                      className="related-item"
+                      onClick={() => onViewNote(item._id)}
+                    >
                       <div className="related-main">
                         <span className="related-title">{item.title}</span>
                         {item.tags && item.tags.length > 0 && (
                           <span className="note-chip">{item.tags[0].name}</span>
                         )}
                         {item.collection && (
-                          <span className="note-chip">
-                            📁 {typeof item.collection === 'object' ? item.collection.name : item.collection}
+                          <span className="note-chip collection-chip">
+                            {typeof item.collection === 'object'
+                              ? item.collection.name
+                              : item.collection}
                           </span>
                         )}
                       </div>
