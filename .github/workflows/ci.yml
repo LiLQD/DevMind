@@ -7,7 +7,6 @@ on:
     branches: [ main ]
 
 jobs:
-  # ── Backend ──
   build-backend:
     runs-on: ubuntu-latest
     defaults:
@@ -20,24 +19,20 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
+          # No cache because lock file is missing – we'll install fresh
           cache: 'npm'
+          cache-dependency-path: server/package-lock.json
 
       - name: Install dependencies
-        run: npm install
+        run: npm install  # No --frozen-lockfile, since lock file may be missing
 
-      - name: Check syntax (server.js)
+      - name: Check server syntax
         run: node --check src/server.js
 
-      - name: Check all controllers & routes syntax
-        run: |
-          find src -name "*.js" -exec node --check {} \;
+      - name: Lint all backend files (optional)
+        run: find src -name "*.js" -exec node --check {} \;
 
-      - name: Run lint (optional)
-        # You can add eslint later if needed
-        run: echo "Backend syntax checks passed"
-
-  # ── Frontend ──
   build-frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -50,10 +45,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: 'pnpm'
+          cache-dependency-path: client/pnpm-lock.yaml
 
-      - name: Install pnpm
+      - name: Install pnpm globally
         run: npm install -g pnpm
 
       - name: Install dependencies
@@ -62,8 +58,5 @@ jobs:
       - name: Build frontend
         run: pnpm build
 
-      - name: Check for missing imports (dry-run)
-        run: pnpm build -- --watch false || echo "Build check done"
-
-      - name: Verify static assets exist
-        run: test -d dist && echo "Build produced dist folder"
+      - name: Verify build output
+        run: test -d dist && echo "Build succeeded"
