@@ -20,17 +20,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
-          # No cache because lock file is missing – we'll install fresh
-          cache: 'npm'
-          cache-dependency-path: server/package-lock.json
+          # No cache – we'll just install fresh
 
       - name: Install dependencies
-        run: npm install  # No --frozen-lockfile, since lock file may be missing
+        run: npm install
 
       - name: Check server syntax
         run: node --check src/server.js
 
-      - name: Lint all backend files (optional)
+      - name: Lint all backend files
         run: find src -name "*.js" -exec node --check {} \;
 
   build-frontend:
