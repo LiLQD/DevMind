@@ -1250,9 +1250,6 @@ button:disabled { opacity: 0.58; cursor: not-allowed; }
 }
 
 :root[data-theme="dark"] .score-chip { color: var(--accent); }
-:root[data-theme="dark"] .collection-filter {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7a8a' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-}
 :root[data-theme="dark"] .collection-new-btn {
   color: var(--accent);
 }
@@ -1260,7 +1257,6 @@ button:disabled { opacity: 0.58; cursor: not-allowed; }
   text-decoration: underline;
 }
 :root[data-theme="dark"] .create-panel select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7a8a' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 :root[data-theme="dark"] .note-chip.collection-chip {
   background: var(--accent-soft);
