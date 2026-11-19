@@ -143,12 +143,13 @@ export const updateNote = async (req, res) => {
       return res.status(403).json({ message: "Không có quyền" });
     }
 
+    const contentChanged = Boolean(content) && content !== note.content;
     if (title) note.title = title;
     if (content) note.content = content;
     if (tags) note.tags = tags;
     if (collections) note.collections = collections;
 
-    if (content && content !== note.content) {
+    if (contentChanged) {
       note.embeddingStatus = "pending";
       try {
         const embedding = await generateEmbedding(content);
