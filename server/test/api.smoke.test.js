@@ -6,6 +6,8 @@ import request from "supertest";
 
 process.env.JWT_SECRET = "smoke-test-secret";
 process.env.REDIS_URL = "redis://smoke-test";
+process.env.MONGODB_URI = "mongodb://smoke-test";
+process.env.GEMINI_API_KEY = "smoke-test-key";
 
 const moduleUrl = (relativePath) =>
   pathToFileURL(resolve(new URL("..", import.meta.url).pathname, relativePath))
@@ -131,7 +133,13 @@ mock.module(moduleUrl("src/models/Collection.js"), {
   exports: { default: Collection },
 });
 mock.module(moduleUrl("src/config/redis.js"), {
-  exports: { default: { call: async () => null, on: () => undefined } },
+  exports: {
+    default: {
+      call: async () => null,
+      on: () => undefined,
+      ping: async () => "PONG",
+    },
+  },
 });
 mock.module("rate-limit-redis", { exports: { default: RedisStore } });
 mock.module(moduleUrl("src/services/embedding.service.js"), {
@@ -205,4 +213,21 @@ test("server API smoke flow", async () => {
     .expect(200);
 
   assert.deepEqual(emptyListResponse.body, []);
+});
+
+test("serves security headers and rejects unknown CORS origins", async () => {
+  const response = await request(app)
+    .get("/api/health")
+    .set("Origin", "https://evil.example")
+    .expect(200);
+
+  assert.equal(response.headers["x-content-type-options"], "nosniff");
+  assert.equal(response.headers["access-control-allow-origin"], undefined);
+});
+
+test("reports dependency readiness separately from liveness", async () => {
+  const response = await request(app).get("/api/ready").expect(503);
+
+  assert.equal(response.body.status, "NOT_READY");
+  assert.deepEqual(response.body.checks, { database: false, redis: true });
 });
