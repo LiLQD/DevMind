@@ -1,8 +1,8 @@
-import { prisma } from './lib/prisma.js';
+import { prisma } from "./lib/prisma.js";
 
 async function main() {
   await prisma.$connect();
-  console.log('Prisma connected successfully.');
+  console.log("Prisma connected successfully.");
 }
 
 main()

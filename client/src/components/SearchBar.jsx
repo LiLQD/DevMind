@@ -1,11 +1,10 @@
-import React from 'react';
+import React from "react";
 
 export default function SearchBar({
   query,
   setQuery,
   onSearch,
   onClearSearch,
-  isSearching,
   isSearchingAI,
   searchInputRef,
 }) {
@@ -39,7 +38,7 @@ export default function SearchBar({
           className="search-bar-submit"
           disabled={isSearchingAI}
         >
-          {isSearchingAI ? 'Searching…' : 'Search'}
+          {isSearchingAI ? "Searching…" : "Search"}
         </button>
       </form>
       <div className="search-bar-meta">

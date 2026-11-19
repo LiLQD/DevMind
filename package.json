@@ -1,0 +1,19 @@
+{
+  "name": "devmind",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "pnpm format:check && pnpm lint && pnpm --dir client build",
+    "lint": "oxlint",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check ."
+  },
+  "devDependencies": {
+    "oxfmt": "^0.74.0",
+    "oxlint": "^1.89.0"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@12.16.1"
+}

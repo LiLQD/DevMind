@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from "react";
 
 export default function CreatePanel({
   isEditing,
@@ -13,7 +13,7 @@ export default function CreatePanel({
   isSaving,
   submitLabel,
   collections = [],
-  selectedCollectionId = '',
+  selectedCollectionId = "",
   setSelectedCollectionId,
   newCollectionName,
   setNewCollectionName,
@@ -23,13 +23,13 @@ export default function CreatePanel({
   const collectionInputRef = useRef(null);
 
   const getCollectionId = (collection) =>
-    String(collection?._id ?? collection?.id ?? '');
+    String(collection?._id ?? collection?.id ?? "");
   const getCollectionName = (collection) =>
-    collection?.name ?? 'Untitled collection';
+    collection?.name ?? "Untitled collection";
 
   const handleCollectionChange = (event) => {
     const value = event.target.value;
-    if (value === '__create_collection__') {
+    if (value === "__create_collection__") {
       setIsCreatingCollection(true);
       window.requestAnimationFrame(() => {
         collectionInputRef.current?.focus();
@@ -51,7 +51,7 @@ export default function CreatePanel({
       if (created) {
         const createdId = getCollectionId(created);
         if (createdId) setSelectedCollectionId(createdId);
-        setNewCollectionName('');
+        setNewCollectionName("");
         setIsCreatingCollection(false);
       }
     } catch {
@@ -61,28 +61,30 @@ export default function CreatePanel({
 
   const closeCollectionCreator = () => {
     setIsCreatingCollection(false);
-    setNewCollectionName('');
-    setSelectedCollectionId('');
+    setNewCollectionName("");
+    setSelectedCollectionId("");
   };
 
-  useEffect(() => {
-    setIsCreatingCollection(false);
-    setNewCollectionName('');
-  }, [isEditing]);
-
   const selectedCollectionExists = collections.some(
-    (c) => getCollectionId(c) === String(selectedCollectionId)
+    (c) => getCollectionId(c) === String(selectedCollectionId),
   );
 
   return (
     <aside className="create-panel">
       <div className="create-header">
         <div>
-          <div className="eyebrow">{isEditing ? 'Edit note' : 'Quick capture'}</div>
-          <h2>{isEditing ? 'Edit note' : 'New note'}</h2>
+          <div className="eyebrow">
+            {isEditing ? "Edit note" : "Quick capture"}
+          </div>
+          <h2>{isEditing ? "Edit note" : "New note"}</h2>
         </div>
         {isEditing && (
-          <button type="button" className="text-btn" onClick={onCancel} disabled={isSaving}>
+          <button
+            type="button"
+            className="text-btn"
+            onClick={onCancel}
+            disabled={isSaving}
+          >
             Cancel
           </button>
         )}
@@ -124,10 +126,10 @@ export default function CreatePanel({
           <select
             value={
               isCreatingCollection
-                ? '__create_collection__'
+                ? "__create_collection__"
                 : selectedCollectionExists
-                ? selectedCollectionId
-                : ''
+                  ? selectedCollectionId
+                  : ""
             }
             onChange={handleCollectionChange}
             disabled={isCreatingCollection}
@@ -155,7 +157,7 @@ export default function CreatePanel({
                 autoComplete="off"
                 onChange={(e) => setNewCollectionName(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
+                  if (e.key === "Escape") {
                     e.preventDefault();
                     closeCollectionCreator();
                   }
@@ -203,7 +205,7 @@ export default function CreatePanel({
             className="primary-btn save-btn"
             disabled={isSaving || isCreatingCollection}
           >
-            {isSaving ? 'Saving…' : submitLabel}
+            {isSaving ? "Saving…" : submitLabel}
           </button>
         </div>
       </form>

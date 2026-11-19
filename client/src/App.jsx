@@ -1,21 +1,21 @@
-import React, { useEffect, useRef, useState } from 'react';
-import './App.css';
+import React, { useEffect, useRef, useState } from "react";
+import "./App.css";
 
 // Components
-import AuthPage from './components/AuthPage';
-import TopBar from './components/TopBar';
-import Sidebar from './components/Sidebar';
-import NoteView from './components/NoteView';
-import CreatePanel from './components/CreatePanel';
-import Notification from './components/Notification';
-import ConfirmModal from './components/ConfirmModal';
-import SearchBar from './components/SearchBar';
+import AuthPage from "./components/AuthPage";
+import TopBar from "./components/TopBar";
+import Sidebar from "./components/Sidebar";
+import NoteView from "./components/NoteView";
+import CreatePanel from "./components/CreatePanel";
+import Notification from "./components/Notification";
+import ConfirmModal from "./components/ConfirmModal";
+import SearchBar from "./components/SearchBar";
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8080/api";
 
 function App() {
   // --- Auth ---
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [token, setToken] = useState(localStorage.getItem("token"));
   const [user, setUser] = useState(null);
 
   // --- Data ---
@@ -27,12 +27,15 @@ function App() {
 
   // --- Collections & Tags ---
   const [collections, setCollections] = useState([]);
-  const [selectedCollectionFilter, setSelectedCollectionFilter] = useState(null);
-  const [selectedCollectionId, setSelectedCollectionId] = useState('');
-  const [newCollectionName, setNewCollectionName] = useState('');
+  const [selectedCollectionFilter, setSelectedCollectionFilter] =
+    useState(null);
+  const [selectedCollectionId, setSelectedCollectionId] = useState("");
+  const [newCollectionName, setNewCollectionName] = useState("");
 
   // --- UI state ---
-  const [theme, setTheme] = useState(localStorage.getItem('devmind-theme') || 'light');
+  const [theme, setTheme] = useState(
+    localStorage.getItem("devmind-theme") || "light",
+  );
   const [notification, setNotification] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
@@ -47,47 +50,60 @@ function App() {
   const [isLoadingRelated, setIsLoadingRelated] = useState(false);
 
   // --- Form states ---
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [isLogin, setIsLogin] = useState(true);
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [query, setQuery] = useState('');
-  const [tagInput, setTagInput] = useState('');
-  const [selectedTagFilter, setSelectedTagFilter] = useState(null);
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [query, setQuery] = useState("");
+  const [tagInput, setTagInput] = useState("");
+  const [selectedTagFilter] = useState(null);
 
   // --- Refs ---
   const searchInputRef = useRef(null);
   const notificationTimerRef = useRef(null);
 
   // --- Notification helper ---
-  const showNotification = (message, type = 'info') => {
+  const showNotification = (message, type = "info") => {
     setNotification({ message, type });
-    if (notificationTimerRef.current) clearTimeout(notificationTimerRef.current);
-    notificationTimerRef.current = setTimeout(() => setNotification(null), 4000);
+    if (notificationTimerRef.current)
+      clearTimeout(notificationTimerRef.current);
+    notificationTimerRef.current = setTimeout(
+      () => setNotification(null),
+      4000,
+    );
   };
 
-  useEffect(() => () => {
-    if (notificationTimerRef.current) clearTimeout(notificationTimerRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (notificationTimerRef.current)
+        clearTimeout(notificationTimerRef.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem('devmind-theme', theme);
+    localStorage.setItem("devmind-theme", theme);
   }, [theme]);
 
   // --- API helper ---
   const apiRequest = async (endpoint, options = {}) => {
     const headers = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     };
     const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
     let data = {};
-    try { data = await res.json(); } catch {}
-    if (!res.ok) throw new Error(data.message || data.error?.message || 'Request failed');
+    try {
+      data = await res.json();
+    } catch {
+      /* body không phải JSON */
+    }
+    if (!res.ok)
+      throw new Error(data.message || data.error?.message || "Request failed");
     return data;
   };
 
@@ -95,25 +111,31 @@ function App() {
   const handleAuth = async (e) => {
     e.preventDefault();
     try {
-      const endpoint = isLogin ? '/auth/login' : '/auth/register';
+      const endpoint = isLogin ? "/auth/login" : "/auth/register";
       const payload = isLogin ? { email, password } : { email, password, name };
-      const data = await apiRequest(endpoint, { method: 'POST', body: JSON.stringify(payload) });
+      const data = await apiRequest(endpoint, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
       if (data.token) {
-        localStorage.setItem('token', data.token);
+        localStorage.setItem("token", data.token);
         setToken(data.token);
         setUser(data.user);
-        setEmail('');
-        setPassword('');
-        setName('');
-        showNotification(isLogin ? 'Welcome back.' : 'Account created.', 'success');
+        setEmail("");
+        setPassword("");
+        setName("");
+        showNotification(
+          isLogin ? "Welcome back." : "Account created.",
+          "success",
+        );
       }
     } catch (err) {
-      showNotification(err.message, 'error');
+      showNotification(err.message, "error");
     }
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
+    localStorage.removeItem("token");
     setToken(null);
     setUser(null);
     setNotes([]);
@@ -121,7 +143,7 @@ function App() {
     setRelatedNotes([]);
     setSearchResults([]);
     setIsSearching(false);
-    setQuery('');
+    setQuery("");
     setCollections([]);
   };
 
@@ -130,15 +152,16 @@ function App() {
     if (!token) return;
     setIsLoadingNotes(true);
     try {
-      let url = '/notes';
+      let url = "/notes";
       const params = new URLSearchParams();
-      if (selectedTagFilter) params.append('tagId', selectedTagFilter);
-      if (selectedCollectionFilter) params.append('collectionId', selectedCollectionFilter);
-      if (params.toString()) url += '?' + params.toString();
+      if (selectedTagFilter) params.append("tagId", selectedTagFilter);
+      if (selectedCollectionFilter)
+        params.append("collectionId", selectedCollectionFilter);
+      if (params.toString()) url += "?" + params.toString();
       const data = await apiRequest(url);
       setNotes(Array.isArray(data) ? data : data.notes || data.data || []);
     } catch {
-      showNotification('Failed to load notes.', 'error');
+      showNotification("Failed to load notes.", "error");
     } finally {
       setIsLoadingNotes(false);
     }
@@ -147,7 +170,7 @@ function App() {
   const fetchCollections = async () => {
     if (!token) return;
     try {
-      const data = await apiRequest('/collections');
+      const data = await apiRequest("/collections");
       setCollections(Array.isArray(data) ? data : data.data || []);
     } catch {
       // ignore
@@ -157,16 +180,16 @@ function App() {
   const createCollection = async (name) => {
     if (!name.trim()) return null;
     try {
-      const data = await apiRequest('/collections', {
-        method: 'POST',
+      const data = await apiRequest("/collections", {
+        method: "POST",
         body: JSON.stringify({ name: name.trim() }),
       });
       const newCol = data.collection || data.data || data;
-      setCollections(prev => [...prev, newCol]);
-      showNotification('Collection created.', 'success');
+      setCollections((prev) => [...prev, newCol]);
+      showNotification("Collection created.", "success");
       return newCol;
     } catch (err) {
-      showNotification(err.message, 'error');
+      showNotification(err.message, "error");
       return null;
     }
   };
@@ -175,7 +198,7 @@ function App() {
   const createNote = async (e) => {
     e.preventDefault();
     if (!title.trim() || !content.trim()) {
-      showNotification('Title and content are required.', 'error');
+      showNotification("Title and content are required.", "error");
       return;
     }
     setIsCreatingNote(true);
@@ -183,21 +206,24 @@ function App() {
       const payload = {
         title: title.trim(),
         content: content.trim(),
-        tags: tagInput.split(',').map(s => s.trim()).filter(Boolean),
+        tags: tagInput
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
       };
       if (selectedCollectionId) payload.collection = selectedCollectionId;
-      await apiRequest('/notes', {
-        method: 'POST',
+      await apiRequest("/notes", {
+        method: "POST",
         body: JSON.stringify(payload),
       });
-      setTitle('');
-      setContent('');
-      setTagInput('');
-      setSelectedCollectionId('');
+      setTitle("");
+      setContent("");
+      setTagInput("");
+      setSelectedCollectionId("");
       await fetchNotes();
-      showNotification('Note created.', 'success');
+      showNotification("Note created.", "success");
     } catch (err) {
-      showNotification(err.message, 'error');
+      showNotification(err.message, "error");
     } finally {
       setIsCreatingNote(false);
     }
@@ -206,7 +232,7 @@ function App() {
   const updateNote = async (e) => {
     e.preventDefault();
     if (!selectedNote || !title.trim() || !content.trim()) {
-      showNotification('Title and content are required.', 'error');
+      showNotification("Title and content are required.", "error");
       return;
     }
     setIsUpdatingNote(true);
@@ -214,24 +240,27 @@ function App() {
       const payload = {
         title: title.trim(),
         content: content.trim(),
-        tags: tagInput.split(',').map(s => s.trim()).filter(Boolean),
+        tags: tagInput
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
       };
       if (selectedCollectionId) payload.collection = selectedCollectionId;
       const data = await apiRequest(`/notes/${selectedNote._id}`, {
-        method: 'PUT',
+        method: "PUT",
         body: JSON.stringify(payload),
       });
       const updated = data.note || data.data || data;
       setSelectedNote(updated);
       setIsEditingNote(false);
-      setTitle('');
-      setContent('');
-      setTagInput('');
-      setSelectedCollectionId('');
+      setTitle("");
+      setContent("");
+      setTagInput("");
+      setSelectedCollectionId("");
       await fetchNotes();
-      showNotification('Note updated.', 'success');
+      showNotification("Note updated.", "success");
     } catch (err) {
-      showNotification(err.message, 'error');
+      showNotification(err.message, "error");
     } finally {
       setIsUpdatingNote(false);
     }
@@ -242,16 +271,16 @@ function App() {
     const targetId = deleteTarget._id;
     setDeletingNoteId(targetId);
     try {
-      await apiRequest(`/notes/${targetId}`, { method: 'DELETE' });
+      await apiRequest(`/notes/${targetId}`, { method: "DELETE" });
       if (selectedNote?._id === targetId) {
         setSelectedNote(null);
         setRelatedNotes([]);
       }
       setDeleteTarget(null);
       await fetchNotes();
-      showNotification('Note deleted.', 'success');
+      showNotification("Note deleted.", "success");
     } catch (err) {
-      showNotification(err.message, 'error');
+      showNotification(err.message, "error");
     } finally {
       setDeletingNoteId(null);
     }
@@ -267,7 +296,7 @@ function App() {
       setSelectedNote(note);
       setRelatedNotes(data.relatedNotes || note.relatedNotes || []);
     } catch {
-      showNotification('Failed to load note.', 'error');
+      showNotification("Failed to load note.", "error");
     } finally {
       setIsLoadingNote(false);
       setIsLoadingRelated(false);
@@ -278,28 +307,34 @@ function App() {
   const handleSearch = async (e) => {
     e?.preventDefault();
     if (!query.trim()) {
-      showNotification('Enter a search query.', 'error');
+      showNotification("Enter a search query.", "error");
       return;
     }
     setIsSearchingAI(true);
     try {
-      const data = await apiRequest('/notes/search', {
-        method: 'POST',
+      const data = await apiRequest("/notes/search", {
+        method: "POST",
         body: JSON.stringify({ query: query.trim() }),
       });
       const results = data.results || data.data || [];
       setSearchResults(results);
       setIsSearching(true);
-      if (results.length === 0) showNotification('No matching notes found.', 'info');
+      if (results.length === 0)
+        showNotification("No matching notes found.", "info");
     } catch (err) {
-      showNotification(err.message.includes('unavailable') ? 'Semantic search temporarily unavailable.' : err.message, 'error');
+      showNotification(
+        err.message.includes("unavailable")
+          ? "Semantic search temporarily unavailable."
+          : err.message,
+        "error",
+      );
     } finally {
       setIsSearchingAI(false);
     }
   };
 
   const clearSearch = () => {
-    setQuery('');
+    setQuery("");
     setSearchResults([]);
     setIsSearching(false);
   };
@@ -308,55 +343,77 @@ function App() {
   const beginEditNote = (note) => {
     setSelectedNote(note);
     setIsEditingNote(true);
-    setTitle(note.title || '');
-    setContent(note.content || '');
-    const tags = (note.tags || []).map(t => t.name || t).join(', ');
+    setTitle(note.title || "");
+    setContent(note.content || "");
+    const tags = (note.tags || []).map((t) => t.name || t).join(", ");
     setTagInput(tags);
-    const collectionId = note.collection?._id || note.collection || '';
+    const collectionId = note.collection?._id || note.collection || "";
     setSelectedCollectionId(collectionId);
-    window.requestAnimationFrame(() => document.querySelector('#note-title')?.focus());
+    window.requestAnimationFrame(() =>
+      document.querySelector("#note-title")?.focus(),
+    );
   };
   const cancelEditNote = () => {
     setIsEditingNote(false);
-    setTitle('');
-    setContent('');
-    setTagInput('');
-    setSelectedCollectionId('');
+    setTitle("");
+    setContent("");
+    setTagInput("");
+    setSelectedCollectionId("");
+    setNewCollectionName("");
   };
 
   // --- Keyboard shortcuts ---
   useEffect(() => {
     const handleKeyDown = (e) => {
       const mod = e.ctrlKey || e.metaKey;
-      const isTyping = ['input', 'textarea'].includes(document.activeElement?.tagName?.toLowerCase());
-      if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); searchInputRef.current?.focus(); return; }
-      if (mod && e.key.toLowerCase() === 'n') { e.preventDefault(); cancelEditNote(); window.requestAnimationFrame(() => document.querySelector('#note-title')?.focus()); return; }
-      if (mod && e.key === 'Enter' && document.activeElement?.closest('.create-panel')) {
+      const isTyping = ["input", "textarea"].includes(
+        document.activeElement?.tagName?.toLowerCase(),
+      );
+      if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        document.querySelector('.create-form')?.requestSubmit();
+        searchInputRef.current?.focus();
         return;
       }
-      if (mod && e.key === 'Delete' && selectedNote && !isTyping) {
+      if (mod && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        cancelEditNote();
+        window.requestAnimationFrame(() =>
+          document.querySelector("#note-title")?.focus(),
+        );
+        return;
+      }
+      if (
+        mod &&
+        e.key === "Enter" &&
+        document.activeElement?.closest(".create-panel")
+      ) {
+        e.preventDefault();
+        document.querySelector(".create-form")?.requestSubmit();
+        return;
+      }
+      if (mod && e.key === "Delete" && selectedNote && !isTyping) {
         e.preventDefault();
         setDeleteTarget(selectedNote);
         return;
       }
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         if (deleteTarget) setDeleteTarget(null);
         else if (isEditingNote) cancelEditNote();
         else if (isSearching) clearSearch();
       }
     };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [deleteTarget, isSearching, isEditingNote, selectedNote]);
 
   // --- Effects ---
   useEffect(() => {
     if (token) {
+      // oxlint-disable-next-line react/set-state-in-effect
       fetchNotes();
       fetchCollections();
     }
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [token, selectedTagFilter, selectedCollectionFilter]);
 
   // --- Auth screen ---
@@ -380,14 +437,19 @@ function App() {
   const displayNotes = isSearching ? searchResults : notes;
 
   return (
-    <div className={`app-shell ${theme === 'dark' ? 'theme-dark' : ''}`}>
-      <Notification notification={notification} onDismiss={() => setNotification(null)} />
-      
+    <div className={`app-shell ${theme === "dark" ? "theme-dark" : ""}`}>
+      <Notification
+        notification={notification}
+        onDismiss={() => setNotification(null)}
+      />
+
       <TopBar
         notesCount={notes.length}
-        userLabel={user?.name || user?.email || 'Account'}
+        userLabel={user?.name || user?.email || "Account"}
         theme={theme}
-        onToggleTheme={() => setTheme(t => t === 'light' ? 'dark' : 'light')}
+        onToggleTheme={() =>
+          setTheme((t) => (t === "light" ? "dark" : "light"))
+        }
         onLogout={handleLogout}
       />
 
@@ -415,7 +477,7 @@ function App() {
             isSearchingAI={isSearchingAI}
             searchInputRef={searchInputRef}
           />
-          
+
           <NoteView
             selectedNote={selectedNote}
             relatedNotes={relatedNotes}
@@ -428,6 +490,7 @@ function App() {
         </main>
 
         <CreatePanel
+          key={isEditingNote ? "edit" : "new"}
           isEditing={isEditingNote}
           title={title}
           setTitle={setTitle}
@@ -438,7 +501,7 @@ function App() {
           onSubmit={isEditingNote ? updateNote : createNote}
           onCancel={cancelEditNote}
           isSaving={isEditingNote ? isUpdatingNote : isCreatingNote}
-          submitLabel={isEditingNote ? 'Save changes' : 'Save note'}
+          submitLabel={isEditingNote ? "Save changes" : "Save note"}
           collections={collections}
           selectedCollectionId={selectedCollectionId}
           setSelectedCollectionId={setSelectedCollectionId}
@@ -450,7 +513,7 @@ function App() {
 
       <ConfirmModal
         isOpen={!!deleteTarget}
-        title={deleteTarget?.title || ''}
+        title={deleteTarget?.title || ""}
         onConfirm={deleteNote}
         onCancel={() => setDeleteTarget(null)}
         isDeleting={deletingNoteId === deleteTarget?._id}
