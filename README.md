@@ -10,36 +10,38 @@ the exact words you used.
 
 ## 🚀 Features
 
--   **Semantic search** -- Find notes by describing what you're looking
-    for, even with different phrasing.
--   **Hybrid scoring** -- Semantic similarity is the primary ranking
-    signal; keyword overlap breaks ties.
--   **Collections & tags** -- Organise your knowledge flexibly.
--   **Related notes** -- Automatically discover semantically similar
-    notes.
--   **Embedding status tracking** -- Notes are saved even if AI
-    generation fails, providing graceful degradation.
--   **Rate limiting** -- Redis-backed rate limiting helps protect the AI
-    API from excessive usage.
--   **Dark / light theme** -- Choose your preferred workspace look.
--   **Keyboard shortcuts** -- `⌘K` to search, `⌘N` for a new note, and
-    more.
+- **Semantic search** -- Find notes by describing what you're looking
+  for, even with different phrasing.
+- **Hybrid scoring** -- Semantic similarity is the primary ranking
+  signal; keyword overlap breaks ties.
+- **Collections & tags** -- Organise your knowledge flexibly.
+- **Related notes** -- Automatically discover semantically similar
+  notes.
+- **Embedding status tracking** -- Notes are saved even if AI
+  generation fails, providing graceful degradation.
+- **Rate limiting** -- Redis-backed rate limiting helps protect the AI
+  API from excessive usage.
+- **Dark / light theme** -- Choose your preferred workspace look.
+- **Keyboard shortcuts** -- `⌘K` to search, `⌘N` for a new note, and
+  more.
 
 ## 🧰 Tech Stack
 
-  Area                Technology
-  ------------------- ----------------------------------------
-  Frontend            React 18 + Vite
-  Backend             Node.js + Express
-  Database            MongoDB (Atlas)
-  Vector embeddings   Google Gemini (`gemini-embedding-001`)
-  Rate limiting       Redis + `express-rate-limit`
-  Authentication      JWT + bcrypt
-  Deployment          Railway (backend), Vercel (frontend)
+Area Technology
+
+---
+
+Frontend React 18 + Vite
+Backend Node.js + Express
+Database MongoDB (Atlas)
+Vector embeddings Google Gemini (`gemini-embedding-001`)
+Rate limiting Redis + `express-rate-limit`
+Authentication JWT + bcrypt
+Deployment Railway (backend), Vercel (frontend)
 
 ## 🏗️ Architecture Overview
 
-``` text
+```text
 ┌─────────────┐      ┌────────────────┐      ┌─────────────┐
 │   Client    │ ──▶ │    Backend     │ ──▶ │   MongoDB   │
 │   (React)   │      │ (Node/Express) │      │ (Notes/Users)│
@@ -62,7 +64,7 @@ The backend is organised into four layers:
 
 ## 📁 Project Structure
 
-``` text
+```text
 .
 ├── client/                 # React + Vite frontend
 ├── server/                 # Node.js + Express backend
@@ -74,15 +76,15 @@ The backend is organised into four layers:
 
 ### Prerequisites
 
--   Node.js 20+
--   pnpm (or npm)
--   MongoDB (local or MongoDB Atlas)
--   Redis (optional for development; used for rate limiting)
--   A Google Gemini API key
+- Node.js 20+
+- pnpm (or npm)
+- MongoDB (local or MongoDB Atlas)
+- Redis (optional for development; used for rate limiting)
+- A Google Gemini API key
 
 ### Backend
 
-``` bash
+```bash
 cd server
 pnpm install
 cp .env.example .env
@@ -91,7 +93,7 @@ cp .env.example .env
 Fill in the required environment variables, then start the development
 server:
 
-``` bash
+```bash
 pnpm run dev
 ```
 
@@ -101,7 +103,7 @@ The backend starts on `http://localhost:8080`.
 
 In another terminal:
 
-``` bash
+```bash
 cd client
 pnpm install
 cp .env.example .env
@@ -109,7 +111,7 @@ cp .env.example .env
 
 Set `VITE_API_URL` to the backend API URL, then run:
 
-``` bash
+```bash
 pnpm run dev
 ```
 
@@ -119,24 +121,29 @@ The frontend starts on `http://localhost:5173`.
 
 ### Backend
 
-  -----------------------------------------------------------------------
-  Variable                            Description
-  ----------------------------------- -----------------------------------
-  `MONGODB_URI`                       MongoDB connection string
+---
 
-  `JWT_SECRET`                        Secret used for signing JWT tokens
+Variable Description
 
-  `GEMINI_API_KEY`                    Google Gemini API key
+---
 
-  `REDIS_URL`                         Redis URL used for rate limiting;
-                                      optional for development
-  -----------------------------------------------------------------------
+`MONGODB_URI` MongoDB connection string
+
+`JWT_SECRET` Secret used for signing JWT tokens
+
+`GEMINI_API_KEY` Google Gemini API key
+
+`REDIS_URL` Redis URL used for rate limiting;
+optional for development
+-----------------------------------------------------------------------
 
 ### Frontend
 
-  Variable         Description
-  ---------------- -----------------
-  `VITE_API_URL`   Backend API URL
+Variable Description
+
+---
+
+`VITE_API_URL` Backend API URL
 
 > Never commit real API keys, database credentials, JWT secrets, or
 > other sensitive environment variables to the repository.
@@ -164,37 +171,40 @@ Both platforms support automatic deployments when changes are pushed to
 
 ## 📡 API Overview
 
-  -----------------------------------------------------------------------
-  Method                  Endpoint                Description
-  ----------------------- ----------------------- -----------------------
-  `POST`                  `/api/auth/register`    Create a new user
+---
 
-  `POST`                  `/api/auth/login`       Login and get a JWT
-                                                  token
+Method Endpoint Description
 
-  `GET`                   `/api/notes`            List all user notes;
-                                                  supports tag/collection
-                                                  filtering
+---
 
-  `POST`                  `/api/notes`            Create a new note and
-                                                  trigger embedding
-                                                  generation
+`POST` `/api/auth/register` Create a new user
 
-  `GET`                   `/api/notes/:id`        Get a note with related
-                                                  suggestions
+`POST` `/api/auth/login` Login and get a JWT
+token
 
-  `PUT`                   `/api/notes/:id`        Update a note
+`GET` `/api/notes` List all user notes;
+supports tag/collection
+filtering
 
-  `DELETE`                `/api/notes/:id`        Delete a note
+`POST` `/api/notes` Create a new note and
+trigger embedding
+generation
 
-  `POST`                  `/api/notes/search`     Perform semantic search
-                                                  using a
-                                                  natural-language query
+`GET` `/api/notes/:id` Get a note with related
+suggestions
 
-  `GET`                   `/api/collections`      List user collections
+`PUT` `/api/notes/:id` Update a note
 
-  `GET`                   `/api/tags`             List user tags
-  -----------------------------------------------------------------------
+`DELETE` `/api/notes/:id` Delete a note
+
+`POST` `/api/notes/search` Perform semantic search
+using a
+natural-language query
+
+`GET` `/api/collections` List user collections
+
+`GET` `/api/tags` List user tags
+-----------------------------------------------------------------------
 
 Full API documentation is available in the source code.
 
@@ -272,4 +282,3 @@ If you have an improvement:
 5.  Open a pull request.
 
 For bugs or feature ideas, please open an issue.
-
