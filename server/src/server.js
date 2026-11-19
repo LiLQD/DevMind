@@ -9,7 +9,8 @@ const PORT = process.env.PORT || 8080;
 console.log("Starting DevMind server...");
 console.log("PORT:", PORT);
 
-mongoose.connect(process.env.MONGODB_URI)
+mongoose
+  .connect(process.env.MONGODB_URI)
   .then(() => {
     console.log("MongoDB connected");
     app.listen(PORT, "0.0.0.0", () => {

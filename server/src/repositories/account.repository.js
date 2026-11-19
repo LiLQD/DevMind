@@ -1,4 +1,4 @@
-const Account = require('../models/Account');
+const Account = require("../models/Account");
 
 async function findByEmail(email) {
   return Account.findOne({ email });
@@ -12,7 +12,7 @@ async function create(data) {
   return Account.create({
     email: data.email,
     passwordHash: data.passwordHash,
-    role: data.role || 'users',
+    role: data.role || "users",
   });
 }
 

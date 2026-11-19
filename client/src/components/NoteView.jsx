@@ -1,12 +1,12 @@
-import React from 'react';
+import React from "react";
 
 // Helper to format date as "Aug 23, 2026"
 function formatDate(dateString) {
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   });
 }
 
@@ -37,14 +37,16 @@ export default function NoteView({
       <main className="main-pane">
         <div className="main-empty">
           <div className="main-empty-title">Select a note</div>
-          <p>Choose a note from the sidebar, or create a new one on the right.</p>
+          <p>
+            Choose a note from the sidebar, or create a new one on the right.
+          </p>
         </div>
       </main>
     );
   }
 
   const collectionName = selectedNote.collection
-    ? typeof selectedNote.collection === 'object'
+    ? typeof selectedNote.collection === "object"
       ? selectedNote.collection.name
       : selectedNote.collection
     : null;
@@ -59,9 +61,13 @@ export default function NoteView({
             <h1 className="note-title">{selectedNote.title}</h1>
             <div className="note-meta-line">
               {collectionName && (
-                <span className="note-chip collection-chip">{collectionName}</span>
+                <span className="note-chip collection-chip">
+                  {collectionName}
+                </span>
               )}
-              <span className="note-date">{formatDate(selectedNote.createdAt)}</span>
+              <span className="note-date">
+                {formatDate(selectedNote.createdAt)}
+              </span>
             </div>
           </div>
           <button
@@ -70,7 +76,7 @@ export default function NoteView({
             onClick={onDeleteNote}
             disabled={deletingNoteId === selectedNote._id}
           >
-            {deletingNoteId === selectedNote._id ? 'Deleting…' : 'Delete'}
+            {deletingNoteId === selectedNote._id ? "Deleting…" : "Delete"}
           </button>
         </div>
 
@@ -92,11 +98,11 @@ export default function NoteView({
         <div className="embedding-status">
           <span className="state-dot" />
           <span>
-            {selectedNote.embeddingStatus === 'success'
-              ? 'Ready for semantic search'
-              : selectedNote.embeddingStatus === 'failed'
-              ? 'Saved without embedding'
-              : 'Embedding in progress'}
+            {selectedNote.embeddingStatus === "success"
+              ? "Ready for semantic search"
+              : selectedNote.embeddingStatus === "failed"
+                ? "Saved without embedding"
+                : "Embedding in progress"}
           </span>
         </div>
 
@@ -118,7 +124,9 @@ export default function NoteView({
                   </div>
                 ))
               ) : relatedNotes.length === 0 ? (
-                <div className="related-empty">No closely related notes found.</div>
+                <div className="related-empty">
+                  No closely related notes found.
+                </div>
               ) : (
                 relatedNotes.map((item) => {
                   const score = Math.round((item.similarityScore || 0) * 100);
@@ -136,7 +144,7 @@ export default function NoteView({
                         )}
                         {item.collection && (
                           <span className="note-chip collection-chip">
-                            {typeof item.collection === 'object'
+                            {typeof item.collection === "object"
                               ? item.collection.name
                               : item.collection}
                           </span>
@@ -144,7 +152,10 @@ export default function NoteView({
                       </div>
                       <div className="related-score">
                         <span className="score-track">
-                          <span className="score-fill" style={{ width: `${score}%` }} />
+                          <span
+                            className="score-fill"
+                            style={{ width: `${score}%` }}
+                          />
                         </span>
                         <strong>{score}%</strong>
                       </div>
