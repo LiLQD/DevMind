@@ -22,7 +22,7 @@ export const protect = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const account = await Account.findById(decoded.id).select("-password");
 
-    if (!account) {
+    if (!account || account.isActive === false) {
       return res.status(401).json({ message: "Token không hợp lệ" });
     }
 
