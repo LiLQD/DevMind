@@ -1,5 +1,7 @@
 import { rateLimit } from "express-rate-limit";
-import { RedisStore } from "rate-limit-redis";
+// rate-limit-redis only has a default export at runtime; named import crashes Node ESM
+// oxlint-disable-next-line import/no-named-as-default
+import RedisStore from "rate-limit-redis";
 import redis from "../config/redis.js";
 
 // General limiter: 200 requests per 15 min per IP
