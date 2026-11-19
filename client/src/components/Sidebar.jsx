@@ -1,5 +1,5 @@
-import React from 'react';
-import NoteList from './NoteList';
+import React from "react";
+import NoteList from "./NoteList";
 
 export default function Sidebar({
   notes,
@@ -16,15 +16,13 @@ export default function Sidebar({
   return (
     <aside className="sidebar">
       <div className="notes-toolbar">
-        <span>
-          {isSearching ? `${notes.length} matches` : 'Your notes'}
-        </span>
+        <span>{isSearching ? `${notes.length} matches` : "Your notes"}</span>
 
         <div className="sidebar-filters">
           {!isSearching && collections.length > 0 && (
             <select
               aria-label="Filter notes by collection"
-              value={selectedCollectionFilter || ''}
+              value={selectedCollectionFilter || ""}
               onChange={(e) =>
                 setSelectedCollectionFilter(e.target.value || null)
               }
@@ -50,14 +48,12 @@ export default function Sidebar({
         onEditNote={onEditNote}
         onDeleteNote={onDeleteNote}
         emptyMessage={
-          isSearching
-            ? 'No notes matched your search.'
-            : 'No notes yet.'
+          isSearching ? "No notes matched your search." : "No notes yet."
         }
         emptyHint={
           isSearching
-            ? 'Try describing the idea instead of remembering exact keywords.'
-            : 'Create your first note to start building your knowledge base.'
+            ? "Try describing the idea instead of remembering exact keywords."
+            : "Create your first note to start building your knowledge base."
         }
       />
     </aside>

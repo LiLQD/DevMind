@@ -1,6 +1,15 @@
-import NoteItem from './NoteItem';
+import NoteItem from "./NoteItem";
 
-export default function NoteList({ notes, selectedNoteId, isLoading, onViewNote, onEditNote, onDeleteNote, emptyMessage, emptyHint }) {
+export default function NoteList({
+  notes,
+  selectedNoteId,
+  isLoading,
+  onViewNote,
+  onEditNote,
+  onDeleteNote,
+  emptyMessage,
+  emptyHint,
+}) {
   if (isLoading) {
     return (
       <div className="notes-list">
@@ -27,7 +36,7 @@ export default function NoteList({ notes, selectedNoteId, isLoading, onViewNote,
 
   return (
     <div className="notes-list">
-      {notes.map(note => (
+      {notes.map((note) => (
         <NoteItem
           key={note._id}
           note={note}

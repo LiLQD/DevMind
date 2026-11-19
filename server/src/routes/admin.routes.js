@@ -1,5 +1,5 @@
-import express from 'express';
-import { protect, admin } from '../middleware/auth.middleware.js';
+import express from "express";
+import { protect, admin } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
@@ -8,39 +8,39 @@ router.use(protect);
 router.use(admin);
 
 // Get all users
-router.get('/users', (req, res) => {
+router.get("/users", (req, res) => {
   // TODO: Implement
-  res.json({ message: 'Admin - Get all users' });
+  res.json({ message: "Admin - Get all users" });
 });
 
 // Lock user account
-router.put('/users/:id/lock', (req, res) => {
+router.put("/users/:id/lock", (req, res) => {
   // TODO: Implement
-  res.json({ message: 'Admin - Lock user' });
+  res.json({ message: "Admin - Lock user" });
 });
 
 // Unlock user account
-router.put('/users/:id/unlock', (req, res) => {
+router.put("/users/:id/unlock", (req, res) => {
   // TODO: Implement
-  res.json({ message: 'Admin - Unlock user' });
+  res.json({ message: "Admin - Unlock user" });
 });
 
 // Delete user
-router.delete('/users/:id', (req, res) => {
+router.delete("/users/:id", (req, res) => {
   // TODO: Implement
-  res.json({ message: 'Admin - Delete user' });
+  res.json({ message: "Admin - Delete user" });
 });
 
 // Get audit logs
-router.get('/audit-logs', (req, res) => {
+router.get("/audit-logs", (req, res) => {
   // TODO: Implement
-  res.json({ message: 'Admin - Get audit logs' });
+  res.json({ message: "Admin - Get audit logs" });
 });
 
 // Get system stats
-router.get('/stats', (req, res) => {
+router.get("/stats", (req, res) => {
   // TODO: Implement
-  res.json({ message: 'Admin - Get stats' });
+  res.json({ message: "Admin - Get stats" });
 });
 
 export default router;

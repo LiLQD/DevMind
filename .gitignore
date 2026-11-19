@@ -31,3 +31,4 @@ Thumbs.db
 # Build / cache
 *.cache
 .vite/
+node_modules/

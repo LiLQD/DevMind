@@ -1,0 +1,32 @@
+{
+  "env": {
+    "node": true,
+    "browser": true,
+    "es2024": true
+  },
+  "plugins": ["typescript", "react", "unicorn", "import", "node", "promise"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "pedantic": "off"
+  },
+  "rules": {
+    "no-unused-vars": "error",
+    "typescript/no-explicit-any": "warn",
+    "react/react-in-jsx-scope": "off",
+    "import/no-unassigned-import": "off",
+    "promise/always-return": "off",
+    "typescript/no-unsafe-type-assertion": "off",
+    "typescript/consistent-return": "off",
+    "typescript/no-floating-promises": "error",
+    "no-underscore-dangle": "off"
+  },
+  "ignorePatterns": [
+    "dist",
+    "build",
+    "coverage",
+    "node_modules",
+    "apps/api/generated",
+    ".github/skills"
+  ]
+}

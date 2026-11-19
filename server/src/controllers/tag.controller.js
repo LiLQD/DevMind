@@ -1,10 +1,10 @@
-import Tag from '../models/Tag.js';
+import Tag from "../models/Tag.js";
 
 export const createTag = async (req, res) => {
   try {
     const { name } = req.body;
     if (!name || !name.trim()) {
-      return res.status(400).json({ message: 'Tag name is required.' });
+      return res.status(400).json({ message: "Tag name is required." });
     }
 
     // Check if tag already exists for this user
@@ -13,7 +13,7 @@ export const createTag = async (req, res) => {
       userId: req.user.id,
     });
     if (existing) {
-      return res.status(409).json({ message: 'Tag already exists.' });
+      return res.status(409).json({ message: "Tag already exists." });
     }
 
     const tag = new Tag({
@@ -24,8 +24,8 @@ export const createTag = async (req, res) => {
 
     res.status(201).json({ tag });
   } catch (error) {
-    console.error('Create tag error:', error);
-    res.status(500).json({ message: 'Failed to create tag.' });
+    console.error("Create tag error:", error);
+    res.status(500).json({ message: "Failed to create tag." });
   }
 };
 
@@ -34,8 +34,8 @@ export const getTags = async (req, res) => {
     const tags = await Tag.find({ userId: req.user.id }).sort({ name: 1 });
     res.json(tags);
   } catch (error) {
-    console.error('Get tags error:', error);
-    res.status(500).json({ message: 'Failed to fetch tags.' });
+    console.error("Get tags error:", error);
+    res.status(500).json({ message: "Failed to fetch tags." });
   }
 };
 
@@ -46,11 +46,11 @@ export const deleteTag = async (req, res) => {
       userId: req.user.id,
     });
     if (!tag) {
-      return res.status(404).json({ message: 'Tag not found.' });
+      return res.status(404).json({ message: "Tag not found." });
     }
-    res.json({ message: 'Tag deleted.' });
+    res.json({ message: "Tag deleted." });
   } catch (error) {
-    console.error('Delete tag error:', error);
-    res.status(500).json({ message: 'Failed to delete tag.' });
+    console.error("Delete tag error:", error);
+    res.status(500).json({ message: "Failed to delete tag." });
   }
 };

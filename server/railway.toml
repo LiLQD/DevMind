@@ -1,13 +1,13 @@
 [build]
-  builder = "NIXPACKS"
-  buildCommand = "npm install"
-  watchPaths = ["server"]
+builder = "NIXPACKS"
+buildCommand = "npm install"
+watchPaths = ["server"]
 
 [deploy]
-  startCommand = "node src/server.js"
-  healthcheckPath = "/api/health"
-  port = 8080
+startCommand = "node src/server.js"
+healthcheckPath = "/api/health"
+port = 8080
 
 [service]
-  name = "devmind-backend"
-  rootDir = "server"
+name = "devmind-backend"
+rootDir = "server"
