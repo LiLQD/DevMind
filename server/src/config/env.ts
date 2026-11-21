@@ -3,15 +3,15 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const nodeEnv = process.env.NODE_ENV || "development";
-const requiredVariables = [
-  "MONGODB_URI",
-  "REDIS_URL",
-  "JWT_SECRET",
-  "GEMINI_API_KEY",
-] as const;
-const missingVariables = requiredVariables.filter(
-  (name) => !process.env[name]?.trim(),
-);
+const required = {
+  MONGODB_URI: process.env.MONGODB_URI ?? "",
+  REDIS_URL: process.env.REDIS_URL ?? "",
+  JWT_SECRET: process.env.JWT_SECRET ?? "",
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY ?? "",
+};
+const missingVariables = Object.entries(required)
+  .filter(([, value]) => !value.trim())
+  .map(([name]) => name);
 
 if (missingVariables.length > 0) {
   throw new Error(
@@ -31,10 +31,7 @@ const configuredOrigins = process.env.CORS_ORIGINS?.split(",")
 export const env = {
   PORT: process.env.PORT || 8080,
   NODE_ENV: nodeEnv,
-  MONGODB_URI: process.env.MONGODB_URI,
-  REDIS_URL: process.env.REDIS_URL,
-  JWT_SECRET: process.env.JWT_SECRET,
-  GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+  ...required,
   CORS_ORIGINS:
     configuredOrigins ||
     (nodeEnv === "production" ? [] : ["http://localhost:5173"]),
