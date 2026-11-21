@@ -211,7 +211,7 @@ function App() {
           .map((s) => s.trim())
           .filter(Boolean),
       };
-      if (selectedCollectionId) payload.collection = selectedCollectionId;
+      if (selectedCollectionId) payload.collections = [selectedCollectionId];
       await apiRequest("/notes", {
         method: "POST",
         body: JSON.stringify(payload),
@@ -245,7 +245,7 @@ function App() {
           .map((s) => s.trim())
           .filter(Boolean),
       };
-      if (selectedCollectionId) payload.collection = selectedCollectionId;
+      if (selectedCollectionId) payload.collections = [selectedCollectionId];
       const data = await apiRequest(`/notes/${selectedNote._id}`, {
         method: "PUT",
         body: JSON.stringify(payload),
