@@ -1,8 +1,6 @@
 import jwt from "jsonwebtoken";
 import Account from "../models/Account.js";
-import dotenv from "dotenv";
-
-dotenv.config();
+import { env } from "../config/env.js";
 
 export const protect = async (req, res, next) => {
   let token;
@@ -19,7 +17,7 @@ export const protect = async (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, env.JWT_SECRET);
     const account = await Account.findById(decoded.id).select("-password");
 
     if (!account || account.isActive === false) {
