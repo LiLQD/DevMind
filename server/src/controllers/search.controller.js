@@ -14,7 +14,7 @@ export const semanticSearch = async (req, res) => {
       return res.status(400).json({ message: "Vui lòng nhập từ khóa" });
     }
 
-    // 1. Count notes for threshold adjustment
+    // 1. Count notes (reported back in the response)
     const noteCount = await Note.countDocuments({
       userId: req.user.id,
       embeddingStatus: "success",
@@ -134,71 +134,37 @@ export const semanticSearch = async (req, res) => {
       const keywordRatio =
         queryWords.length > 0 ? matchedKeywords / queryWords.length : 0;
 
+      // Do not send the 768-number embedding back to the client
+      const { embedding: _embedding, ...noteData } = note.toObject();
       return {
-        ...note.toObject(),
+        ...noteData,
         semanticScore,
         keywordRatio,
       };
     });
 
-    // 6. Semantic threshold based on note count (more notes = lower threshold)
-    let baseThreshold = 0.7;
-    if (noteCount < 10) baseThreshold = 0.85;
-    else if (noteCount < 20) baseThreshold = 0.8;
-    else if (noteCount < 50) baseThreshold = 0.75;
-    else baseThreshold = 0.7;
+    // 6. Rank by semantic score; keywords only nudge the order.
+    //    Gemini scores sit in a narrow band (unrelated notes still score
+    //    ~0.5-0.6), so an absolute threshold does not work. Cut relative to
+    //    the best hit instead. MIN_SCORE and MARGIN are placeholders that
+    //    disable cutting: calibrate them from real scores.
+    const MIN_SCORE = 0;
+    const MARGIN = 1;
+    const KEYWORD_BONUS = 0.05;
 
-    // Filter by semantic score
-    let semanticResults = scored.filter(
-      (item) => item.semanticScore >= baseThreshold,
+    const ranked = scored
+      .map((item) => ({
+        ...item,
+        finalScore: item.semanticScore + KEYWORD_BONUS * item.keywordRatio,
+      }))
+      .toSorted((a, b) => b.finalScore - a.finalScore);
+
+    const best = ranked[0]?.finalScore ?? 0;
+    const passing = ranked.filter(
+      (item) =>
+        item.finalScore >= MIN_SCORE && item.finalScore >= best - MARGIN,
     );
-
-    // Sort by semantic score descending
-    semanticResults.sort((a, b) => b.semanticScore - a.semanticScore);
-
-    // 7. (Optional) Tie‑breaker: reorder within groups where semantic scores are very close
-    //    Use keywordRatio to break ties. Group by consecutive differences < 0.05.
-    if (semanticResults.length > 0) {
-      const groups = [];
-      let currentGroup = [semanticResults[0]];
-
-      for (let i = 1; i < semanticResults.length; i++) {
-        // Compare with the last element of the current group (not the first)
-        const lastScore = currentGroup[currentGroup.length - 1].semanticScore;
-        const currentScore = semanticResults[i].semanticScore;
-        if (lastScore - currentScore < 0.05) {
-          currentGroup.push(semanticResults[i]);
-        } else {
-          groups.push(currentGroup);
-          currentGroup = [semanticResults[i]];
-        }
-      }
-      if (currentGroup.length > 0) groups.push(currentGroup);
-
-      // Sort each group by keywordRatio descending, then flatten
-      const reordered = [];
-      for (const group of groups) {
-        group.sort((a, b) => b.keywordRatio - a.keywordRatio);
-        reordered.push(...group);
-      }
-      semanticResults = reordered;
-    }
-
-    // Take top K
-    let finalResults = semanticResults.slice(0, TOP_K);
-
-    // 8. Graceful fallback: if semantic filter returned nothing, use keyword-only ranking
-    if (finalResults.length === 0) {
-      // Sort all notes by keywordRatio descending
-      const keywordSorted = scored.toSorted(
-        (a, b) => b.keywordRatio - a.keywordRatio,
-      );
-      // Only take those with at least some keyword match
-      const keywordCandidates = keywordSorted.filter(
-        (item) => item.keywordRatio > 0,
-      );
-      finalResults = keywordCandidates.slice(0, TOP_K);
-    }
+    const finalResults = passing.slice(0, TOP_K);
 
     if (finalResults.length === 0) {
       return res.status(404).json({
@@ -207,7 +173,7 @@ export const semanticSearch = async (req, res) => {
       });
     }
 
-    // 9. Save search log (store semantic scores for later analysis)
+    // 7. Save search log (store semantic scores for later analysis)
     try {
       const searchLog = new SearchLog({
         userId: req.user.id,
@@ -221,12 +187,12 @@ export const semanticSearch = async (req, res) => {
       console.error("Failed to save search log:", logError);
     }
 
-    // 10. Return results (both scores available for client-side display if needed)
+    // 8. Return results (both scores available for client-side display if needed)
     res.json({
       results: finalResults,
-      totalFound: semanticResults.length,
+      totalFound: passing.length,
       returned: finalResults.length,
-      threshold: baseThreshold,
+      threshold: MIN_SCORE,
       noteCount: noteCount,
     });
   } catch (error) {
