@@ -11,7 +11,7 @@ import staffRoutes from "./routes/staff.routes.js";
 import tagRoutes from "./routes/tag.routes.js";
 import collectionRoutes from "./routes/collection.routes.js";
 
-import { generalLimiter, searchLimiter } from "./middleware/rateLimiter.js";
+import { generalLimiter, searchLimiter } from "./middleware/rateLimiter.ts";
 import redis from "./config/redis.ts";
 
 console.log("Configuring Express app...");
