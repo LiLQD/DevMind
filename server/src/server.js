@@ -1,7 +1,7 @@
 import { env } from "./config/env.ts";
 import app from "./app.js";
 import mongoose from "mongoose";
-import redis from "./config/redis.js";
+import redis from "./config/redis.ts";
 
 let httpServer;
 let shuttingDown = false;

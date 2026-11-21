@@ -11,5 +11,5 @@
     "verbatimModuleSyntax": true,
     "rewriteRelativeImportExtensions": true
   },
-  "files": ["src/config/env.ts"]
+  "files": ["src/config/env.ts", "src/config/redis.ts"]
 }
