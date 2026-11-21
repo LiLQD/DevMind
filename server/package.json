@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --experimental-test-module-mocks --test"
+    "test": "node --experimental-test-module-mocks --test",
+    "dev": "node --watch src/server.js"
   },
   "dependencies": {
     "@google/genai": "^2.17.1",
