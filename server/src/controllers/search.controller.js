@@ -146,10 +146,10 @@ export const semanticSearch = async (req, res) => {
     // 6. Rank by semantic score; keywords only nudge the order.
     //    Gemini scores sit in a narrow band (unrelated notes still score
     //    ~0.5-0.6), so an absolute threshold does not work. Cut relative to
-    //    the best hit instead. MIN_SCORE and MARGIN are placeholders that
-    //    disable cutting: calibrate them from real scores.
-    const MIN_SCORE = 0;
-    const MARGIN = 1;
+    //    the best hit instead. MIN_SCORE and MARGIN were calibrated on 11 notes;
+    //    recalibrate when the note count grows.
+    const MIN_SCORE = 0.6;
+    const MARGIN = 0.06;
     const KEYWORD_BONUS = 0.05;
 
     const ranked = scored
