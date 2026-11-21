@@ -21,14 +21,20 @@ jobs:
         with:
           node-version: 24
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Install dependencies
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Check server syntax
         run: node --check src/server.js
 
       - name: Lint all backend files
         run: find src -name "*.js" -exec node --check {} \;
+
+      - name: Run backend API tests
+        run: pnpm test
 
   build-frontend:
     runs-on: ubuntu-latest
