@@ -29,7 +29,7 @@ const configuredOrigins = process.env.CORS_ORIGINS?.split(",")
   .filter(Boolean);
 
 export const env = {
-  PORT: process.env.PORT || "8080",
+  PORT: process.env.PORT || 8080,
   NODE_ENV: nodeEnv,
   MONGODB_URI: process.env.MONGODB_URI,
   REDIS_URL: process.env.REDIS_URL,

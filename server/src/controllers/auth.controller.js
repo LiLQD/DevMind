@@ -1,9 +1,7 @@
 import Account from "../models/Account.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import dotenv from "dotenv";
-
-dotenv.config();
+import { env } from "../config/env.js";
 
 export const register = async (req, res) => {
   try {
@@ -28,7 +26,7 @@ export const register = async (req, res) => {
 
     const token = jwt.sign(
       { id: account._id, role: account.role },
-      process.env.JWT_SECRET,
+      env.JWT_SECRET,
       { expiresIn: "7d" },
     );
 
@@ -67,7 +65,7 @@ export const login = async (req, res) => {
 
     const token = jwt.sign(
       { id: account._id, role: account.role },
-      process.env.JWT_SECRET,
+      env.JWT_SECRET,
       { expiresIn: "7d" },
     );
 

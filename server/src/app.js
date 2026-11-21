@@ -1,4 +1,3 @@
-import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -14,8 +13,6 @@ import collectionRoutes from "./routes/collection.routes.js";
 
 import { generalLimiter, searchLimiter } from "./middleware/rateLimiter.js";
 import redis from "./config/redis.js";
-
-dotenv.config();
 
 console.log("Configuring Express app...");
 
