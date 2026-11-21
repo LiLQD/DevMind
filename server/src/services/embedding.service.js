@@ -24,6 +24,7 @@ export async function generateEmbedding(text) {
       contents: text,
       config: {
         taskType: "RETRIEVAL_DOCUMENT",
+        outputDimensionality: 768,
       },
     });
     return response.embeddings?.[0]?.values || null;
@@ -39,7 +40,8 @@ export async function generateQueryEmbedding(text) {
       model: "gemini-embedding-001",
       contents: text,
       config: {
-        taskType: "RETRIEVAL_QUERY", // Important: different task type
+        taskType: "RETRIEVAL_QUERY",
+        outputDimensionality: 768,
       },
     });
     return response.embeddings?.[0]?.values || null;
