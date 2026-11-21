@@ -1,9 +1,11 @@
 # DevMind — Codex Instructions
 
 ## Project
+
 DevMind is an AI-powered knowledge management app.
 
 Stack:
+
 - React 19 + Vite
 - Node.js + Express 5
 - MongoDB + Mongoose
@@ -11,6 +13,7 @@ Stack:
 - Gemini embeddings
 
 ## Workflow
+
 - Read .github/copilot-instructions.md before editing.
 - Work on one small, explicitly approved task at a time.
 - Inspect relevant files before proposing changes.
@@ -21,7 +24,9 @@ Stack:
 - Explain WHY non-trivial changes are necessary.
 
 ## Skills
+
 Use installed skills only when relevant:
+
 - nodejs-express-skill: Express backend work
 - react-architecture: React architecture work
 - backend-search-patterns: Search and ranking work
@@ -30,4 +35,3 @@ Use installed skills only when relevant:
 
 Project-specific instructions take precedence over
 generic skill recommendations.
-
