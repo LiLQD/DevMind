@@ -1,11 +1,8 @@
-import dotenv from "dotenv";
+import { env } from "./config/env.js";
 import app from "./app.js";
 import mongoose from "mongoose";
 import redis from "./config/redis.js";
 
-dotenv.config();
-
-const PORT = process.env.PORT || 8080;
 let httpServer;
 let shuttingDown = false;
 
@@ -41,14 +38,14 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
 
 console.log("Starting DevMind server...");
-console.log("PORT:", PORT);
+console.log("PORT:", env.PORT);
 
 mongoose
-  .connect(process.env.MONGODB_URI)
+  .connect(env.MONGODB_URI)
   .then(() => {
     console.log("MongoDB connected");
-    httpServer = app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Backend chạy tại http://localhost:${PORT}`);
+    httpServer = app.listen(env.PORT, "0.0.0.0", () => {
+      console.log(`Backend chạy tại http://localhost:${env.PORT}`);
     });
   })
   .catch((error) => {

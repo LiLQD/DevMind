@@ -1,9 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
-import dotenv from "dotenv";
+import { env } from "../config/env.js";
 
-dotenv.config();
-
-const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const genAI = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
 // Cosine Similarity
 export function cosineSimilarity(vecA, vecB) {
