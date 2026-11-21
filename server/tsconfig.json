@@ -11,5 +11,9 @@
     "verbatimModuleSyntax": true,
     "rewriteRelativeImportExtensions": true
   },
-  "files": ["src/config/env.ts", "src/config/redis.ts"]
+  "files": [
+    "src/config/env.ts",
+    "src/config/redis.ts",
+    "src/middleware/rateLimiter.ts"
+  ]
 }
