@@ -6,14 +6,16 @@
     "check": "pnpm format:check && pnpm lint && pnpm --dir client build && pnpm --dir server test",
     "lint": "oxlint",
     "format": "oxfmt .",
-    "format:check": "oxfmt --check ."
+    "format:check": "oxfmt --check .",
+    "dev": "concurrently -n server,client -c blue,green --kill-others-on-fail \"pnpm --dir server dev\" \"pnpm --dir client dev\""
   },
   "devDependencies": {
+    "concurrently": "^10.0.7",
     "oxfmt": "^0.74.0",
-    "oxlint": "^1.89.0"
+    "oxlint": "^1.94.0"
   },
   "engines": {
     "node": ">=24"
   },
-  "packageManager": "pnpm@12.16.1"
+  "packageManager": "pnpm@12.21.0"
 }
