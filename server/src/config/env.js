@@ -24,8 +24,7 @@ if (trustProxyValue !== undefined && !/^\d+$/.test(trustProxyValue)) {
   throw new Error("TRUST_PROXY must be a non-negative integer");
 }
 
-const configuredOrigins = process.env.CORS_ORIGINS
-  ?.split(",")
+const configuredOrigins = process.env.CORS_ORIGINS?.split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
@@ -37,7 +36,8 @@ export const env = {
   JWT_SECRET: process.env.JWT_SECRET,
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   CORS_ORIGINS:
-    configuredOrigins || (nodeEnv === "production" ? [] : ["http://localhost:5173"]),
+    configuredOrigins ||
+    (nodeEnv === "production" ? [] : ["http://localhost:5173"]),
   TRUST_PROXY:
     trustProxyValue === undefined
       ? nodeEnv === "production"
