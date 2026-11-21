@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import mongoose from "mongoose";
-import { env } from "./config/env.js";
+import { env } from "./config/env.ts";
 
 import authRoutes from "./routes/auth.routes.js";
 import noteRoutes from "./routes/notes.routes.js";

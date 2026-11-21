@@ -1,7 +1,7 @@
 import Account from "../models/Account.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { env } from "../config/env.js";
+import { env } from "../config/env.ts";
 
 export const register = async (req, res) => {
   try {

@@ -76,7 +76,7 @@ The backend is organised into four layers:
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 24+ for local development and tests (compiled backend supports Node.js 20+)
 - pnpm (or npm)
 - MongoDB (local or MongoDB Atlas)
 - Redis (optional for development; used for rate limiting)
