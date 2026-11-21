@@ -1,8 +1,26 @@
+import Tag from "../models/Tag.js";
 import Note from "../models/Note.js";
 import {
   generateEmbedding,
   cosineSimilarity,
 } from "../services/embedding.service.js";
+
+// Resolve tag names to ObjectIds, creating missing tags for this user.
+const resolveTagIds = async (names, userId) => {
+  const unique = [
+    ...new Set((names || []).map((n) => String(n).trim()).filter(Boolean)),
+  ];
+  const ids = [];
+  for (const name of unique) {
+    const tag = await Tag.findOneAndUpdate(
+      { name, userId },
+      { $setOnInsert: { name, userId } },
+      { upsert: true, returnDocument: "after" },
+    );
+    ids.push(tag._id);
+  }
+  return ids;
+};
 
 // Create note
 export const createNote = async (req, res) => {
@@ -22,7 +40,7 @@ export const createNote = async (req, res) => {
       content,
       userId: req.user.id,
       embeddingStatus: "pending",
-      tags: tags || [],
+      tags: await resolveTagIds(tags, req.user.id),
       collections: collections || [],
     });
 
@@ -146,7 +164,7 @@ export const updateNote = async (req, res) => {
     const contentChanged = Boolean(content) && content !== note.content;
     if (title) note.title = title;
     if (content) note.content = content;
-    if (tags) note.tags = tags;
+    if (tags) note.tags = await resolveTagIds(tags, req.user.id);
     if (collections) note.collections = collections;
 
     if (contentChanged) {
