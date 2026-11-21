@@ -33,6 +33,9 @@ jobs:
       - name: Lint all backend files
         run: find src -name "*.js" -exec node --check {} \;
 
+      - name: Type-check backend
+        run: pnpm typecheck
+
       - name: Run backend API tests
         run: pnpm test
 
