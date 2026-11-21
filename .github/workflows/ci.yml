@@ -36,6 +36,9 @@ jobs:
       - name: Type-check backend
         run: pnpm typecheck
 
+      - name: Build backend
+        run: pnpm build
+
       - name: Run backend API tests
         run: pnpm test
 
