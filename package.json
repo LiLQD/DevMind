@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "pnpm format:check && pnpm lint && pnpm --dir server typecheck && pnpm --dir client build && pnpm --dir server test",
+    "check": "pnpm format:check && pnpm lint && pnpm --dir server typecheck && pnpm --dir server build && pnpm --dir client build && pnpm --dir server test",
     "lint": "oxlint",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",

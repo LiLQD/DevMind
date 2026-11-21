@@ -8,7 +8,7 @@ const requiredVariables = [
   "REDIS_URL",
   "JWT_SECRET",
   "GEMINI_API_KEY",
-];
+] as const;
 const missingVariables = requiredVariables.filter(
   (name) => !process.env[name]?.trim(),
 );
