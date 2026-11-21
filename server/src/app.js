@@ -12,7 +12,7 @@ import tagRoutes from "./routes/tag.routes.js";
 import collectionRoutes from "./routes/collection.routes.js";
 
 import { generalLimiter, searchLimiter } from "./middleware/rateLimiter.js";
-import redis from "./config/redis.js";
+import redis from "./config/redis.ts";
 
 console.log("Configuring Express app...");
 

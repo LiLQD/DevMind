@@ -159,7 +159,7 @@ mock.module(moduleUrl("src/models/SearchLog.js"), {
     },
   },
 });
-mock.module(moduleUrl("src/config/redis.js"), {
+mock.module(moduleUrl("src/config/redis.ts"), {
   exports: {
     default: {
       call: async () => null,
