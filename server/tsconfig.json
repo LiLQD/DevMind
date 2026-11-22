@@ -14,6 +14,7 @@
   "files": [
     "src/config/env.ts",
     "src/config/redis.ts",
+    "src/controllers/collection.controller.ts",
     "src/controllers/tag.controller.ts",
     "src/middleware/auth.middleware.ts",
     "src/middleware/rateLimiter.ts",
@@ -23,6 +24,7 @@
     "src/models/Note.ts",
     "src/models/SearchLog.ts",
     "src/models/Tag.ts",
+    "src/routes/collection.routes.ts",
     "src/routes/tag.routes.ts",
     "src/services/embedding.service.ts"
   ]

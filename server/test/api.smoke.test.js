@@ -123,7 +123,7 @@ class Collection {
   }
 
   async save() {
-    collections.push(this);
+    if (!collections.includes(this)) collections.push(this);
     return this;
   }
 
@@ -271,6 +271,38 @@ async function listNotes(auth) {
     .expect(200);
   return response.body;
 }
+
+test("rejects duplicate collection names and scopes updates to the owner", async () => {
+  const owner = await register("collection-owner@example.com");
+  const other = await register("collection-other@example.com");
+
+  const created = await request(app)
+    .post("/api/collections")
+    .set("Authorization", owner)
+    .send({ name: "  Work  " })
+    .expect(201);
+  assert.equal(created.body.collection.name, "Work");
+
+  await request(app)
+    .post("/api/collections")
+    .set("Authorization", owner)
+    .send({ name: "Work" })
+    .expect(409, { message: "Collection already exists." });
+
+  const path = `/api/collections/${created.body.collection._id}`;
+  await request(app)
+    .put(path)
+    .set("Authorization", other)
+    .send({ name: "Renamed" })
+    .expect(404, { message: "Collection not found." });
+  const updated = await request(app)
+    .put(path)
+    .set("Authorization", owner)
+    .send({ description: "  Updated  " })
+    .expect(200);
+  assert.equal(updated.body.collection.name, "Work");
+  assert.equal(updated.body.collection.description, "Updated");
+});
 
 test("regenerates embeddings and saves the updated note when content changes", async () => {
   const auth = await register("owner@example.com");

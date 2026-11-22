@@ -9,7 +9,7 @@ import noteRoutes from "./routes/notes.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import staffRoutes from "./routes/staff.routes.js";
 import tagRoutes from "./routes/tag.routes.ts";
-import collectionRoutes from "./routes/collection.routes.js";
+import collectionRoutes from "./routes/collection.routes.ts";
 
 import { generalLimiter, searchLimiter } from "./middleware/rateLimiter.ts";
 import redis from "./config/redis.ts";

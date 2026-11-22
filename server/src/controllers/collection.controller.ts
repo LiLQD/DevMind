@@ -1,24 +1,34 @@
+import type { RequestHandler } from "express";
 import Collection from "../models/Collection.ts";
 
-export const createCollection = async (req, res) => {
+type CollectionBody = { name?: unknown; description?: unknown };
+
+export const createCollection: RequestHandler = async (req, res) => {
   try {
-    const { name, description } = req.body;
-    if (!name || !name.trim()) {
+    const { name, description }: CollectionBody = req.body;
+    if (name && typeof name !== "string") {
+      throw new TypeError("Collection name must be a string.");
+    }
+    const trimmedName = typeof name === "string" ? name.trim() : "";
+    if (!trimmedName) {
       return res.status(400).json({ message: "Collection name is required." });
     }
 
     const existing = await Collection.findOne({
-      name: name.trim(),
-      userId: req.user.id,
+      name: trimmedName,
+      userId: req.user!.id,
     });
     if (existing) {
       return res.status(409).json({ message: "Collection already exists." });
     }
 
+    if (description != null && typeof description !== "string") {
+      throw new TypeError("Collection description must be a string.");
+    }
     const collection = new Collection({
-      name: name.trim(),
+      name: trimmedName,
       description: description?.trim() || "",
-      userId: req.user.id,
+      userId: req.user!.id,
     });
     await collection.save();
 
@@ -29,9 +39,9 @@ export const createCollection = async (req, res) => {
   }
 };
 
-export const getCollections = async (req, res) => {
+export const getCollections: RequestHandler = async (req, res) => {
   try {
-    const collections = await Collection.find({ userId: req.user.id }).sort({
+    const collections = await Collection.find({ userId: req.user!.id }).sort({
       name: 1,
     });
     res.json(collections);
@@ -41,19 +51,32 @@ export const getCollections = async (req, res) => {
   }
 };
 
-export const updateCollection = async (req, res) => {
+export const updateCollection: RequestHandler<{ id: string }> = async (
+  req,
+  res,
+) => {
   try {
-    const { name, description } = req.body;
+    const { name, description }: CollectionBody = req.body;
     const collection = await Collection.findOne({
       _id: req.params.id,
-      userId: req.user.id,
+      userId: req.user!.id,
     });
     if (!collection) {
       return res.status(404).json({ message: "Collection not found." });
     }
 
-    if (name) collection.name = name.trim();
-    if (description !== undefined) collection.description = description.trim();
+    if (name) {
+      if (typeof name !== "string") {
+        throw new TypeError("Collection name must be a string.");
+      }
+      collection.name = name.trim();
+    }
+    if (description !== undefined) {
+      if (typeof description !== "string") {
+        throw new TypeError("Collection description must be a string.");
+      }
+      collection.description = description.trim();
+    }
 
     await collection.save();
     res.json({ collection });
@@ -63,11 +86,14 @@ export const updateCollection = async (req, res) => {
   }
 };
 
-export const deleteCollection = async (req, res) => {
+export const deleteCollection: RequestHandler<{ id: string }> = async (
+  req,
+  res,
+) => {
   try {
     const collection = await Collection.findOneAndDelete({
       _id: req.params.id,
-      userId: req.user.id,
+      userId: req.user!.id,
     });
     if (!collection) {
       return res.status(404).json({ message: "Collection not found." });
