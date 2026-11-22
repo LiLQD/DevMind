@@ -15,6 +15,7 @@
     "src/config/env.ts",
     "src/config/redis.ts",
     "src/middleware/rateLimiter.ts",
+    "src/models/Account.ts",
     "src/models/SearchLog.ts",
     "src/models/Tag.ts",
     "src/services/embedding.service.ts"

@@ -145,7 +145,7 @@ class RedisStore {
   async resetKey() {}
 }
 
-mock.module(moduleUrl("src/models/Account.js"), {
+mock.module(moduleUrl("src/models/Account.ts"), {
   exports: { default: Account },
 });
 mock.module(moduleUrl("src/models/Note.js"), { exports: { default: Note } });
