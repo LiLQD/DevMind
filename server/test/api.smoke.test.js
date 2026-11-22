@@ -18,6 +18,7 @@ const query = (value) => {
     select: () => chain,
     populate: () => chain,
     sort: () => chain,
+    lean: () => chain,
     // oxlint-disable-next-line unicorn/no-thenable
     then: (resolveValue, rejectValue) =>
       Promise.resolve(value).then(resolveValue, rejectValue),
@@ -30,6 +31,7 @@ const accounts = [];
 const notes = [];
 const collections = [];
 const tags = [];
+const subscriptions = [];
 let nextId = 1;
 
 const matches = (document, filter) =>
@@ -175,6 +177,14 @@ mock.module(moduleUrl("src/models/Collection.ts"), {
   exports: { default: Collection },
 });
 mock.module(moduleUrl("src/models/Tag.ts"), { exports: { default: Tag } });
+mock.module(moduleUrl("src/models/Subscription.ts"), {
+  exports: {
+    default: {
+      findOne: (filter) =>
+        query(subscriptions.find((record) => matches(record, filter)) ?? null),
+    },
+  },
+});
 mock.module(moduleUrl("src/models/SearchLog.ts"), {
   exports: {
     default: class SearchLog {
@@ -212,6 +222,7 @@ beforeEach(() => {
   notes.length = 0;
   collections.length = 0;
   tags.length = 0;
+  subscriptions.length = 0;
   nextId = 1;
   generateEmbedding.mock.resetCalls();
   generateEmbedding.mock.mockImplementation(defaultEmbedding);
@@ -225,6 +236,57 @@ async function register(email) {
     .expect(201);
   return `Bearer ${response.body.token}`;
 }
+
+test("subscription access is scoped to the account and requires an active Pro period", async () => {
+  await request(app).get("/api/subscription").expect(401);
+  const owner = await register("pro-owner@example.com");
+  const other = await register("free-account@example.com");
+  const periodEnd = new Date(Date.now() + 86_400_000);
+  const subscription = {
+    accountId: accounts.find(({ email }) => email === "pro-owner@example.com")
+      ._id,
+    plan: "pro",
+    status: "active",
+    providerCustomerId: "private-customer-id",
+    providerSubscriptionId: "private-subscription-id",
+    currentPeriodEnd: periodEnd,
+    cancelAtPeriodEnd: true,
+  };
+  subscriptions.push(subscription);
+  const getSubscription = (auth) =>
+    request(app).get("/api/subscription").set("Authorization", auth);
+
+  await getSubscription(owner).expect(200, {
+    plan: "pro",
+    status: "active",
+    currentPeriodEnd: periodEnd.toISOString(),
+    cancelAtPeriodEnd: true,
+    entitlements: { bulkMarkdownImport: true, expandedRelatedNotes: true },
+  });
+  const freeEntitlements = {
+    bulkMarkdownImport: false,
+    expandedRelatedNotes: false,
+  };
+  await getSubscription(other)
+    .query({ accountId: subscription.accountId, plan: "pro" })
+    .expect(200, {
+      plan: "free",
+      status: null,
+      currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
+      entitlements: freeEntitlements,
+    });
+
+  subscription.status = "past_due";
+  const pastDue = await getSubscription(owner).expect(200);
+  assert.equal(pastDue.body.plan, "free");
+  assert.deepEqual(pastDue.body.entitlements, freeEntitlements);
+
+  subscription.status = "active";
+  subscription.currentPeriodEnd = new Date(0);
+  const expired = await getSubscription(owner).expect(200);
+  assert.equal(expired.body.plan, "free");
+});
 
 test("rejects duplicate registration and incorrect login credentials", async () => {
   const email = "registered@example.com";
