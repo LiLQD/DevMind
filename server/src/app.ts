@@ -11,6 +11,7 @@ import adminRoutes from "./routes/admin.routes.ts";
 import staffRoutes from "./routes/staff.routes.ts";
 import tagRoutes from "./routes/tag.routes.ts";
 import collectionRoutes from "./routes/collection.routes.ts";
+import subscriptionRoutes from "./routes/subscription.routes.ts";
 
 import { generalLimiter, searchLimiter } from "./middleware/rateLimiter.ts";
 import redis from "./config/redis.ts";
@@ -95,6 +96,7 @@ export function createApp() {
   app.use("/api/staff", staffRoutes);
   app.use("/api/tags", tagRoutes);
   app.use("/api/collections", collectionRoutes);
+  app.use("/api/subscription", subscriptionRoutes);
 
   console.log("Routes mounted");
 
