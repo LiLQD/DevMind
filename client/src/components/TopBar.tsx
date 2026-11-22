@@ -20,28 +20,33 @@ export default function TopBar({
   return (
     <header className="topbar">
       <div className="topbar-left">
-        <div className="brand-lockup">
-          <span className="brand-name">DevMind</span>
-          <span className="brand-tagline">
-            Your second brain for developers
-          </span>
-        </div>
-        <span className="note-count">{notesCount} notes</span>
+        <span className="brand-name">DevMind</span>
+        <span className="note-count">
+          {notesCount} {notesCount === 1 ? "note" : "notes"}
+        </span>
       </div>
-      <div className="topbar-right">
-        <button type="button" className="theme-btn" onClick={onToggleTheme}>
-          {theme === "light" ? "Dark" : "Light"}
-        </button>
+      <div
+        className="topbar-right"
+        role="group"
+        aria-label="Workspace controls"
+      >
         <span className="account-label">{userLabel}</span>
         <button
           type="button"
-          className="secondary-btn"
+          className="topbar-button"
           onClick={onExportNotes}
           disabled={isExportingNotes}
         >
           {isExportingNotes ? "Exporting…" : "Export Markdown"}
         </button>
-        <button type="button" className="secondary-btn" onClick={onLogout}>
+        <button type="button" className="topbar-button" onClick={onToggleTheme}>
+          {theme === "light" ? "Dark mode" : "Light mode"}
+        </button>
+        <button
+          type="button"
+          className="topbar-button topbar-button-quiet"
+          onClick={onLogout}
+        >
           Logout
         </button>
       </div>
