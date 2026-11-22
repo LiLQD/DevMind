@@ -1,3 +1,16 @@
+import type { Note } from "../types";
+
+export type NoteListProps = {
+  notes: Note[];
+  selectedNoteId?: string;
+  isLoading: boolean;
+  onViewNote: (id: string) => void;
+  onEditNote: (note: Note) => void;
+  onDeleteNote: (note: Note) => void;
+  emptyMessage: string;
+  emptyHint: string;
+};
+
 import NoteItem from "./NoteItem";
 
 export default function NoteList({
@@ -9,7 +22,7 @@ export default function NoteList({
   onDeleteNote,
   emptyMessage,
   emptyHint,
-}) {
+}: NoteListProps) {
   if (isLoading) {
     return (
       <div className="notes-list">

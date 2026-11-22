@@ -1,4 +1,13 @@
-import React from "react";
+import type { Collection } from "../types";
+import type { NoteListProps } from "./NoteList";
+
+type SidebarProps = Omit<NoteListProps, "emptyMessage" | "emptyHint"> & {
+  isSearching: boolean;
+  selectedCollectionFilter: string | null;
+  setSelectedCollectionFilter: (id: string | null) => void;
+  collections?: Collection[];
+};
+
 import NoteList from "./NoteList";
 
 export default function Sidebar({
@@ -12,7 +21,7 @@ export default function Sidebar({
   selectedCollectionFilter,
   setSelectedCollectionFilter,
   collections = [],
-}) {
+}: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="notes-toolbar">
