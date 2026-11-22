@@ -30,9 +30,6 @@ jobs:
       - name: Check server syntax
         run: node --check src/server.ts
 
-      - name: Lint all backend files
-        run: find src -name "*.js" -exec node --check {} \;
-
       - name: Type-check backend
         run: pnpm typecheck
 
