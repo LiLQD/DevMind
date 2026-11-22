@@ -1,8 +1,24 @@
 import jwt from "jsonwebtoken";
+import type { RequestHandler } from "express";
+import type { HydratedDocument, InferSchemaType } from "mongoose";
 import Account from "../models/Account.ts";
 import { env } from "../config/env.ts";
 
-export const protect = async (req, res, next) => {
+type AccountDocument = HydratedDocument<InferSchemaType<typeof Account.schema>>;
+
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        id: AccountDocument["_id"];
+        email: AccountDocument["email"];
+        role: AccountDocument["role"];
+      };
+    }
+  }
+}
+
+export const protect: RequestHandler = async (req, res, next) => {
   let token;
 
   if (
@@ -18,7 +34,9 @@ export const protect = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, env.JWT_SECRET);
-    const account = await Account.findById(decoded.id).select("-password");
+    const accountId: unknown =
+      typeof decoded === "string" ? undefined : decoded.id;
+    const account = await Account.findById(accountId).select("-password");
 
     if (!account || account.isActive === false) {
       return res.status(401).json({ message: "Token không hợp lệ" });
@@ -36,15 +54,17 @@ export const protect = async (req, res, next) => {
   }
 };
 
-export const admin = async (req, res, next) => {
-  if (req.user.role !== "admin") {
+// The routers run protect before either role check.
+export const admin: RequestHandler = async (req, res, next) => {
+  if (req.user!.role !== "admin") {
     return res.status(403).json({ message: "Yêu cầu quyền Admin" });
   }
   next();
 };
 
-export const staff = async (req, res, next) => {
-  if (req.user.role !== "staff" && req.user.role !== "admin") {
+export const staff: RequestHandler = async (req, res, next) => {
+  const { role } = req.user!;
+  if (role !== "staff" && role !== "admin") {
     return res.status(403).json({ message: "Yêu cầu quyền Staff" });
   }
   next();

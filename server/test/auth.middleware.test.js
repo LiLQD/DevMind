@@ -18,7 +18,7 @@ mock.module("../src/config/env.ts", {
 });
 
 const { protect, admin, staff } =
-  await import("../src/middleware/auth.middleware.js");
+  await import("../src/middleware/auth.middleware.ts");
 
 function response() {
   return {

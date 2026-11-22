@@ -5,7 +5,7 @@ import {
   updateCollection,
   deleteCollection,
 } from "../controllers/collection.controller.js";
-import { protect } from "../middleware/auth.middleware.js";
+import { protect } from "../middleware/auth.middleware.ts";
 
 const router = express.Router();
 
