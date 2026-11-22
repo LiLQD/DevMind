@@ -599,7 +599,7 @@ function App() {
           setSelectedCollectionFilter={setSelectedCollectionFilter}
         />
 
-        <main className="main-pane">
+        <main className="main-pane" aria-label="Notes workspace">
           <SearchBar
             mode={searchMode}
             setMode={(mode) => {

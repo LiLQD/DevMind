@@ -2,17 +2,20 @@
    VARIABLES
    ============================================================ */
 :root {
-  --bg: #f7f8fa;
+  color-scheme: light;
+  --canvas: #f5f6f8;
   --surface: #ffffff;
-  --surface-muted: #f8fafc;
-  --border: #e2e6ec;
-  --border-strong: #cbd3df;
-  --text: #151b26;
-  --text-soft: #4b5563;
-  --text-muted: #7b8797;
-  --accent: #2563eb;
-  --accent-strong: #1d4ed8;
-  --accent-soft: #eff4ff;
+  --surface-subtle: #f0f2f5;
+  --border: #d9dee6;
+  --border-strong: #bbc4d0;
+  --text: #17202c;
+  --text-muted: #526071;
+  --accent-text: #2455b2;
+  --accent-surface: #eaf1ff;
+  --action-bg: #2455b2;
+  --action-fg: #ffffff;
+  --action-hover: #1e4694;
+  --focus-ring: #2455b2;
   --success: #16835b;
   --success-soft: #eaf8f1;
   --warning: #a16207;
@@ -21,20 +24,49 @@
   --danger-soft: #fff1ef;
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
   --shadow-md: 0 10px 30px rgba(15, 23, 42, 0.08);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --font-meta: 0.75rem;
+  --font-control: 0.875rem;
+  --font-brand: 1.125rem;
+  --font-body: 1rem;
+  --font-note-title: clamp(1.75rem, 2.5vw, 2rem);
+  --border-width: 1px;
+  --radius-control: 6px;
+  --radius-dialog: 8px;
+  --control-height: 36px;
+  --touch-target: 44px;
+
+  /* Keep the existing component tokens while their styles migrate. */
+  --bg: var(--canvas);
+  --surface-muted: var(--surface-subtle);
+  --text-soft: var(--text-muted);
+  --accent: var(--accent-text);
+  --accent-strong: var(--action-hover);
+  --accent-soft: var(--accent-surface);
 }
 
 :root[data-theme="dark"] {
-  --bg: #11151b;
-  --surface: #171c23;
-  --surface-muted: #1c232d;
-  --border: #2b3440;
-  --border-strong: #3a4655;
-  --text: #edf1f7;
-  --text-soft: #b8c2cf;
-  --text-muted: #8d99a8;
-  --accent: #4c8dff;
-  --accent-strong: #3a7bf0;
-  --accent-soft: #1b2a43;
+  color-scheme: dark;
+  --canvas: #111318;
+  --surface: #181c23;
+  --surface-subtle: #202630;
+  --border: #343d49;
+  --border-strong: #525e6d;
+  --text: #eef1f5;
+  --text-muted: #a9b4c3;
+  --accent-text: #91b9ff;
+  --accent-surface: #222f49;
+  --action-bg: #91b9ff;
+  --action-fg: #101a2a;
+  --action-hover: #b1cfff;
+  --focus-ring: #91b9ff;
   --success: #3fcf8e;
   --success-soft: #16382b;
   --warning: #f1b94a;
@@ -67,12 +99,14 @@ body {
     sans-serif;
   background: var(--bg);
   color: var(--text);
+  font-size: var(--font-body);
   line-height: 1.5;
   overflow: hidden;
 }
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -80,10 +114,8 @@ button {
   border: 0;
 }
 
-button:focus-visible,
-input:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid rgba(37, 99, 235, 0.4);
+:is(button, input, select, textarea, a[href], [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -174,7 +206,6 @@ kbd {
 .form-field textarea:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.09);
-  outline: 0;
 }
 
 .auth-switch {
@@ -204,8 +235,8 @@ kbd {
 }
 
 .primary-btn {
-  background: var(--accent);
-  color: #fff;
+  background: var(--action-bg);
+  color: var(--action-fg);
   padding: 0 14px;
   font-weight: 600;
 }
@@ -265,82 +296,79 @@ button:disabled {
    ============================================================ */
 .app-shell {
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   background: var(--bg);
 }
 
 .topbar {
-  height: 72px;
-  flex: 0 0 72px;
+  min-height: 56px;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 22px;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-6);
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--border-width) solid var(--border);
 }
 
 .topbar-left {
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-width: 0;
-}
-.brand-lockup {
-  display: flex;
-  align-items: center;
-  gap: 14px;
+  gap: var(--space-3);
   min-width: 0;
 }
 
 .brand-name {
-  font-size: 22px;
+  font-size: var(--font-brand);
   font-weight: 700;
-  letter-spacing: -0.04em;
-}
-.brand-tagline {
-  font-size: 13px;
-  color: var(--text-muted);
-  padding-left: 14px;
-  border-left: 1px solid var(--border);
-  white-space: nowrap;
+  letter-spacing: -0.025em;
 }
 
 .note-count {
   color: var(--text-muted);
-  background: var(--surface-muted);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 3px 9px;
-  font-size: 12px;
+  border-inline-start: var(--border-width) solid var(--border);
+  padding-inline-start: var(--space-3);
+  font-size: var(--font-meta);
+  white-space: nowrap;
 }
 
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
 }
 
-.theme-btn {
-  min-height: 34px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
+.topbar-button {
+  min-height: var(--control-height);
+  padding: 0 var(--space-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-control);
   background: var(--surface);
-  color: var(--text-soft);
+  color: var(--text);
+  font-size: var(--font-control);
   cursor: pointer;
 }
 
-.theme-btn:hover {
-  background: var(--surface-muted);
-  color: var(--text);
+.topbar-button-quiet {
+  border-color: transparent;
+  color: var(--text-muted);
+}
+
+.topbar-button:hover:not(:disabled) {
+  background: var(--surface-subtle);
 }
 
 .account-label {
-  color: var(--text-soft);
-  font-size: 13px;
-  max-width: 240px;
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+  max-width: 180px;
+  padding-inline-end: var(--space-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -378,10 +406,11 @@ button:disabled {
 .main-pane {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 22px 40px 42px;
+  gap: var(--space-6);
+  min-width: 0;
+  padding: var(--space-6) var(--space-8) var(--space-12);
   overflow-y: auto;
-  background: #f9fafb;
+  background: var(--canvas);
 }
 
 /* ============================================================
@@ -597,7 +626,6 @@ button:disabled {
 }
 
 .collection-filter:focus {
-  outline: 0;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
 }
@@ -654,7 +682,6 @@ button:disabled {
 }
 
 .search-bar-input:focus {
-  outline: 0;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
 }
@@ -698,8 +725,8 @@ button:disabled {
 }
 
 .search-bar-submit:hover:not(:disabled) {
-  background: var(--accent);
-  color: white;
+  background: var(--action-bg);
+  color: var(--action-fg);
 }
 
 .search-bar-submit:disabled {
@@ -739,7 +766,7 @@ button:disabled {
 }
 
 .note-title {
-  font-size: clamp(1.6rem, 2.5vw, 2.2rem);
+  font-size: var(--font-note-title);
   font-weight: 600;
   margin: 4px 0 6px 0;
 }
@@ -1010,7 +1037,6 @@ button:disabled {
 }
 
 .create-panel select:focus {
-  outline: 0;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
 }
@@ -1048,7 +1074,6 @@ button:disabled {
 }
 
 .collection-quick-create input:focus {
-  outline: 0;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.06);
 }
@@ -1120,7 +1145,6 @@ button:disabled {
 }
 
 .create-panel .form-field-content textarea:focus {
-  outline: 0;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.09);
 }
@@ -1297,11 +1321,11 @@ button:disabled {
    EMPTY STATES
    ============================================================ */
 .main-empty {
-  min-height: 100%;
+  flex: 1 0 auto;
   display: grid;
   place-content: center;
   text-align: center;
-  padding: 30px;
+  padding: var(--space-8);
 }
 
 .main-empty-title {
@@ -1323,11 +1347,7 @@ button:disabled {
     grid-template-columns: 280px minmax(0, 1fr) 285px;
   }
   .main-pane {
-    padding-left: 34px;
-    padding-right: 34px;
-  }
-  .brand-tagline {
-    display: none;
+    padding-inline: var(--space-4);
   }
 }
 
@@ -1358,10 +1378,7 @@ button:disabled {
     min-height: 520px;
   }
   .topbar {
-    height: auto;
-    min-height: 72px;
-    gap: 10px;
-    padding: 14px 16px;
+    padding-inline: var(--space-4);
   }
   .account-label {
     display: none;
@@ -1369,21 +1386,14 @@ button:disabled {
 }
 
 @media (max-width: 560px) {
-  .topbar,
   .topbar-right {
-    flex-wrap: wrap;
+    flex-basis: 100%;
   }
-  .topbar-left {
-    gap: 8px;
-  }
-  .note-count {
-    display: none;
-  }
-  .brand-name {
-    font-size: 19px;
+  .topbar-button {
+    min-height: var(--touch-target);
   }
   .main-pane {
-    padding: 22px 16px 28px;
+    padding: var(--space-4) var(--space-4) var(--space-8);
   }
   .note-title {
     font-size: 1.4rem;
@@ -1432,9 +1442,6 @@ button:disabled {
 :root[data-theme="dark"] body {
   background: var(--bg);
 }
-:root[data-theme="dark"] .main-pane {
-  background: #12171e;
-}
 :root[data-theme="dark"] .auth-page {
   background: #0f1318;
 }
@@ -1456,7 +1463,6 @@ button:disabled {
   background-size: 400% 100%;
 }
 
-:root[data-theme="dark"] .brand-name,
 :root[data-theme="dark"] .note-title,
 :root[data-theme="dark"] .section-heading h2,
 :root[data-theme="dark"] .create-header h2,
@@ -1471,8 +1477,6 @@ button:disabled {
   color: var(--text);
 }
 
-:root[data-theme="dark"] .brand-tagline,
-:root[data-theme="dark"] .account-label,
 :root[data-theme="dark"] .search-label,
 :root[data-theme="dark"] .search-bar-meta,
 :root[data-theme="dark"] .notes-toolbar,
@@ -1509,7 +1513,6 @@ button:disabled {
 :root[data-theme="dark"] .note-item,
 :root[data-theme="dark"] .sidebar,
 :root[data-theme="dark"] .create-panel,
-:root[data-theme="dark"] .topbar,
 :root[data-theme="dark"] .note-content,
 :root[data-theme="dark"] .related-section,
 :root[data-theme="dark"] .auth-box {
@@ -1526,7 +1529,6 @@ button:disabled {
 }
 
 :root[data-theme="dark"] .secondary-btn,
-:root[data-theme="dark"] .theme-btn,
 :root[data-theme="dark"] .row-action,
 :root[data-theme="dark"] kbd {
   background: var(--surface);
@@ -1535,8 +1537,7 @@ button:disabled {
 }
 
 :root[data-theme="dark"] .note-chip,
-:root[data-theme="dark"] .score-chip,
-:root[data-theme="dark"] .note-count {
+:root[data-theme="dark"] .score-chip {
   background: var(--surface-muted);
   color: var(--text-soft);
   border-color: var(--border);
