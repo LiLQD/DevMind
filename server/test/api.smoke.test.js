@@ -32,6 +32,7 @@ const notes = [];
 const collections = [];
 const tags = [];
 const subscriptions = [];
+const usageWrites = mock.fn(async () => {});
 let nextId = 1;
 
 const matches = (document, filter) =>
@@ -185,6 +186,9 @@ mock.module(moduleUrl("src/models/Subscription.ts"), {
     },
   },
 });
+mock.module(moduleUrl("src/models/MonthlyUsage.ts"), {
+  exports: { default: { init: async () => {}, updateOne: usageWrites } },
+});
 mock.module(moduleUrl("src/models/SearchLog.ts"), {
   exports: {
     default: class SearchLog {
@@ -223,10 +227,13 @@ beforeEach(() => {
   collections.length = 0;
   tags.length = 0;
   subscriptions.length = 0;
+  usageWrites.mock.resetCalls();
+  usageWrites.mock.restore();
   nextId = 1;
   generateEmbedding.mock.resetCalls();
   generateEmbedding.mock.mockImplementation(defaultEmbedding);
   generateQueryEmbedding.mock.resetCalls();
+  generateQueryEmbedding.mock.mockImplementation(defaultEmbedding);
 });
 
 async function register(email) {
@@ -494,6 +501,53 @@ test("saves a failed content update and excludes its retained vector from search
     [control._id],
   );
   assert.equal(search.body.noteCount, 1);
+});
+
+test("meters only requests that attempt semantic search or note embedding", async () => {
+  const auth = await register("usage@example.com");
+  const note = await createNote(auth);
+  await updateNote(auth, note._id, { title: "Metadata update" }).expect(200);
+  generateEmbedding.mock.mockImplementation(async () => null);
+  await updateNote(auth, note._id, { content: "Changed content" }).expect(200);
+
+  const search = (body) =>
+    request(app)
+      .post("/api/notes/search")
+      .set("Authorization", auth)
+      .send(body);
+  await search({ mode: "exact", query: "Changed content" }).expect(200);
+  await search({ query: "" }).expect(400);
+  generateQueryEmbedding.mock.mockImplementation(async () => null);
+  await search({ query: "Changed content" }).expect(503);
+
+  const now = new Date();
+  const filter = {
+    accountId: accounts[0]._id,
+    monthStart: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
+  };
+  assert.deepEqual(
+    usageWrites.mock.calls.map(({ arguments: args }) => args),
+    [
+      [filter, { $inc: { noteEmbeddingRequests: 1 } }, { upsert: true }],
+      [filter, { $inc: { noteEmbeddingRequests: 1 } }, { upsert: true }],
+      [filter, { $inc: { semanticSearchRequests: 1 } }, { upsert: true }],
+    ],
+  );
+});
+
+test("retries duplicate-key usage writes and preserves note saves when metering fails", async () => {
+  const auth = await register("usage-failure@example.com");
+  usageWrites.mock.mockImplementationOnce(async () => {
+    throw Object.assign(new Error("Duplicate usage month"), { code: 11000 });
+  });
+  usageWrites.mock.mockImplementationOnce(async () => {
+    throw new Error("Usage storage unavailable");
+  }, 1);
+  const note = await createNote(auth);
+  assert.equal(note.embeddingStatus, "success");
+  assert.equal(usageWrites.mock.callCount(), 2);
+  const [filter, update] = usageWrites.mock.calls[0].arguments;
+  assert.deepEqual(usageWrites.mock.calls[1].arguments, [filter, update]);
 });
 
 test("exact search matches literal punctuation across the owner's notes without embeddings", async () => {
