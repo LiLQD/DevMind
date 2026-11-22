@@ -3,7 +3,7 @@ import {
   createTag,
   getTags,
   deleteTag,
-} from "../controllers/tag.controller.js";
+} from "../controllers/tag.controller.ts";
 import { protect } from "../middleware/auth.middleware.ts";
 
 const router = express.Router();

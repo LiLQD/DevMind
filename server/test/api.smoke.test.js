@@ -29,6 +29,7 @@ const query = (value) => {
 const accounts = [];
 const notes = [];
 const collections = [];
+const tags = [];
 let nextId = 1;
 
 const matches = (document, filter) =>
@@ -122,7 +123,7 @@ class Collection {
   }
 
   async save() {
-    collections.push(this);
+    if (!collections.includes(this)) collections.push(this);
     return this;
   }
 
@@ -145,6 +146,25 @@ class RedisStore {
   async resetKey() {}
 }
 
+class Tag {
+  constructor(data) {
+    Object.assign(this, data, { _id: String(nextId++) });
+  }
+
+  async save() {
+    tags.push(this);
+  }
+
+  static findOne(filter) {
+    return query(tags.find((tag) => matches(tag, filter)) || null);
+  }
+
+  static findOneAndDelete(filter) {
+    const index = tags.findIndex((tag) => matches(tag, filter));
+    return query(index === -1 ? null : tags.splice(index, 1)[0]);
+  }
+}
+
 mock.module(moduleUrl("src/models/Account.ts"), {
   exports: { default: Account },
 });
@@ -152,6 +172,7 @@ mock.module(moduleUrl("src/models/Note.ts"), { exports: { default: Note } });
 mock.module(moduleUrl("src/models/Collection.ts"), {
   exports: { default: Collection },
 });
+mock.module(moduleUrl("src/models/Tag.ts"), { exports: { default: Tag } });
 mock.module(moduleUrl("src/models/SearchLog.ts"), {
   exports: {
     default: class SearchLog {
@@ -185,6 +206,7 @@ beforeEach(() => {
   accounts.length = 0;
   notes.length = 0;
   collections.length = 0;
+  tags.length = 0;
   nextId = 1;
   generateEmbedding.mock.resetCalls();
   generateEmbedding.mock.mockImplementation(defaultEmbedding);
@@ -207,6 +229,34 @@ async function createNote(auth, content = "Original content") {
   return response.body;
 }
 
+test("rejects duplicate tag names and scopes deletion to the owner", async () => {
+  const owner = await register("tag-owner@example.com");
+  const other = await register("tag-other@example.com");
+
+  const created = await request(app)
+    .post("/api/tags")
+    .set("Authorization", owner)
+    .send({ name: "  Work  " })
+    .expect(201);
+  assert.equal(created.body.tag.name, "Work");
+
+  await request(app)
+    .post("/api/tags")
+    .set("Authorization", owner)
+    .send({ name: "Work" })
+    .expect(409, { message: "Tag already exists." });
+
+  const path = `/api/tags/${created.body.tag._id}`;
+  await request(app)
+    .delete(path)
+    .set("Authorization", other)
+    .expect(404, { message: "Tag not found." });
+  await request(app)
+    .delete(path)
+    .set("Authorization", owner)
+    .expect(200, { message: "Tag deleted." });
+});
+
 function updateNote(auth, id, changes) {
   return request(app)
     .put(`/api/notes/${id}`)
@@ -221,6 +271,38 @@ async function listNotes(auth) {
     .expect(200);
   return response.body;
 }
+
+test("rejects duplicate collection names and scopes updates to the owner", async () => {
+  const owner = await register("collection-owner@example.com");
+  const other = await register("collection-other@example.com");
+
+  const created = await request(app)
+    .post("/api/collections")
+    .set("Authorization", owner)
+    .send({ name: "  Work  " })
+    .expect(201);
+  assert.equal(created.body.collection.name, "Work");
+
+  await request(app)
+    .post("/api/collections")
+    .set("Authorization", owner)
+    .send({ name: "Work" })
+    .expect(409, { message: "Collection already exists." });
+
+  const path = `/api/collections/${created.body.collection._id}`;
+  await request(app)
+    .put(path)
+    .set("Authorization", other)
+    .send({ name: "Renamed" })
+    .expect(404, { message: "Collection not found." });
+  const updated = await request(app)
+    .put(path)
+    .set("Authorization", owner)
+    .send({ description: "  Updated  " })
+    .expect(200);
+  assert.equal(updated.body.collection.name, "Work");
+  assert.equal(updated.body.collection.description, "Updated");
+});
 
 test("regenerates embeddings and saves the updated note when content changes", async () => {
   const auth = await register("owner@example.com");
