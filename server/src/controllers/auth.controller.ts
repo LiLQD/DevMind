@@ -1,18 +1,28 @@
 import Account from "../models/Account.ts";
+import type { RequestHandler } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.ts";
 
-export const register = async (req, res) => {
-  try {
-    const { email, password, name } = req.body;
+type Credentials = { email?: unknown; password?: unknown };
 
-    const existing = await Account.findOne({ email });
+export const register: RequestHandler = async (req, res) => {
+  try {
+    const { email, password, name }: Credentials & { name?: unknown } =
+      req.body;
+
+    // Keep the raw email value for Mongoose's existing query casting.
+    const existing = await Account.findOne({
+      email: email as string | undefined,
+    });
     if (existing) {
       return res.status(400).json({ message: "Email đã tồn tại" });
     }
 
     const salt = await bcrypt.genSalt(10);
+    if (typeof password !== "string" && !Buffer.isBuffer(password)) {
+      throw new TypeError("Password must be a string or Buffer.");
+    }
     const hashedPassword = await bcrypt.hash(password, salt);
 
     const account = new Account({
@@ -45,17 +55,22 @@ export const register = async (req, res) => {
   }
 };
 
-export const login = async (req, res) => {
+export const login: RequestHandler = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password }: Credentials = req.body;
 
-    const account = await Account.findOne({ email });
+    const account = await Account.findOne({
+      email: email as string | undefined,
+    });
     if (!account) {
       return res
         .status(401)
         .json({ message: "Email hoặc mật khẩu không đúng" });
     }
 
+    if (typeof password !== "string" && !Buffer.isBuffer(password)) {
+      throw new TypeError("Password must be a string or Buffer.");
+    }
     const valid = await bcrypt.compare(password, account.password);
     if (!valid) {
       return res
@@ -84,9 +99,9 @@ export const login = async (req, res) => {
   }
 };
 
-export const getProfile = async (req, res) => {
+export const getProfile: RequestHandler = async (req, res) => {
   try {
-    const account = await Account.findById(req.user.id).select("-password");
+    const account = await Account.findById(req.user!.id).select("-password");
     res.json(account);
   } catch (error) {
     console.error("Get profile error:", error);
@@ -94,11 +109,11 @@ export const getProfile = async (req, res) => {
   }
 };
 
-export const updateProfile = async (req, res) => {
+export const updateProfile: RequestHandler = async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name }: { name?: unknown } = req.body;
     const account = await Account.findByIdAndUpdate(
-      req.user.id,
+      req.user!.id,
       { name },
       { new: true },
     ).select("-password");
