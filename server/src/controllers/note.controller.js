@@ -1,5 +1,5 @@
 import Tag from "../models/Tag.ts";
-import Note from "../models/Note.js";
+import Note from "../models/Note.ts";
 import {
   generateEmbedding,
   cosineSimilarity,

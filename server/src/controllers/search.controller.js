@@ -1,4 +1,4 @@
-import Note from "../models/Note.js";
+import Note from "../models/Note.ts";
 import SearchLog from "../models/SearchLog.ts";
 import {
   generateQueryEmbedding,
