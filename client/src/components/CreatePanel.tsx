@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import type { ChangeEvent, FormEventHandler, MouseEvent } from "react";
 import type { Collection } from "../types";
+import NoteMarkdown from "./NoteMarkdown";
 
 type CollectionOption = Partial<Collection> & { id?: string };
 
@@ -53,10 +54,12 @@ export default function CreatePanel({
   onCreateCollection,
 }: CreatePanelProps) {
   const [isCreatingCollection, setIsCreatingCollection] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
   const collectionInputRef = useRef<HTMLInputElement>(null);
   const contentInputRef = useRef<HTMLTextAreaElement>(null);
 
   const applyFixTemplate = () => {
+    setIsPreviewing(false);
     setContent(fixTemplate);
     window.requestAnimationFrame(() => {
       const input = contentInputRef.current;
@@ -136,7 +139,13 @@ export default function CreatePanel({
         )}
       </div>
 
-      <form onSubmit={onSubmit} className="create-form">
+      <form
+        onSubmit={(event) => {
+          setIsPreviewing(false);
+          onSubmit(event);
+        }}
+        className="create-form"
+      >
         {/* Title */}
         <label className="form-field form-field-title">
           <span>Title</span>
@@ -242,16 +251,54 @@ export default function CreatePanel({
         )}
 
         {/* Content */}
-        <label className="form-field form-field-content">
-          <span>Content (Markdown)</span>
+        <div className="form-field form-field-content">
+          <div className="markdown-editor-header">
+            <label htmlFor="note-content">Content (Markdown)</label>
+            <div
+              className="markdown-editor-actions"
+              role="group"
+              aria-label="Markdown editor mode"
+            >
+              <button
+                type="button"
+                className="secondary-btn"
+                aria-pressed={!isPreviewing}
+                onClick={() => setIsPreviewing(false)}
+              >
+                Write
+              </button>
+              <button
+                type="button"
+                className="secondary-btn"
+                aria-pressed={isPreviewing}
+                onClick={() => setIsPreviewing(true)}
+              >
+                Preview
+              </button>
+            </div>
+          </div>
           <textarea
+            id="note-content"
             ref={contentInputRef}
             placeholder="Write the idea, fix, snippet, or reference you want to remember…"
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            required
+            hidden={isPreviewing}
+            required={!isPreviewing}
           />
-        </label>
+          {isPreviewing && (
+            <article
+              className="note-content markdown-editor-preview"
+              aria-label="Markdown preview"
+            >
+              {content.trim() ? (
+                <NoteMarkdown content={content} />
+              ) : (
+                <p>Nothing to preview yet.</p>
+              )}
+            </article>
+          )}
+        </div>
 
         {/* Footer */}
         <div className="create-footer">

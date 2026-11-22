@@ -1075,6 +1075,34 @@ button:disabled {
   min-height: 32px;
 }
 
+.markdown-editor-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.markdown-editor-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.markdown-editor-actions button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.note-content.markdown-editor-preview {
+  min-height: 220px;
+  margin-bottom: 0;
+  padding: 11px 12px;
+}
+
 .create-panel .form-field-content textarea {
   width: 100%;
   min-height: 220px;
