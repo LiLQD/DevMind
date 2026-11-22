@@ -28,7 +28,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check server syntax
-        run: node --check src/server.js
+        run: node --check src/server.ts
 
       - name: Lint all backend files
         run: find src -name "*.js" -exec node --check {} \;
