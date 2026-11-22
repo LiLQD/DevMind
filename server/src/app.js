@@ -5,7 +5,7 @@ import mongoose from "mongoose";
 import { env } from "./config/env.ts";
 
 import authRoutes from "./routes/auth.routes.ts";
-import noteRoutes from "./routes/notes.routes.js";
+import noteRoutes from "./routes/notes.routes.ts";
 import adminRoutes from "./routes/admin.routes.ts";
 import staffRoutes from "./routes/staff.routes.ts";
 import tagRoutes from "./routes/tag.routes.ts";
