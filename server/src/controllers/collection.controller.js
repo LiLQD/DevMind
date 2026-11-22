@@ -1,4 +1,4 @@
-import Collection from "../models/Collection.js";
+import Collection from "../models/Collection.ts";
 
 export const createCollection = async (req, res) => {
   try {

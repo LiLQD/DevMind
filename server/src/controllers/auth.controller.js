@@ -1,4 +1,4 @@
-import Account from "../models/Account.js";
+import Account from "../models/Account.ts";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.ts";
