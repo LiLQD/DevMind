@@ -8,6 +8,8 @@ process.env.JWT_SECRET = "smoke-test-secret";
 process.env.REDIS_URL = "redis://smoke-test";
 process.env.MONGODB_URI = "mongodb://smoke-test";
 process.env.GEMINI_API_KEY = "smoke-test-key";
+process.env.NODE_ENV = "production";
+process.env.ENABLE_MOCK_BILLING = "true";
 
 const moduleUrl = (relativePath) =>
   pathToFileURL(resolve(new URL("..", import.meta.url).pathname, relativePath))
@@ -914,4 +916,39 @@ test("returns search unavailable when plan lookup or quota storage fails", async
       databaseError.message,
     ),
   );
+});
+
+test("production hides mock billing routes and ignores persisted mock entitlements", async () => {
+  const auth = await register("production-mock@example.com");
+  subscriptions.push({
+    accountId: accounts[0]._id,
+    billingProvider: "mock",
+    plan: "pro",
+    status: "active",
+    currentPeriodEnd: new Date(Date.now() + 86_400_000),
+  });
+
+  const base = "/api/mock-billing/checkouts";
+  await request(app).post(base).set("Authorization", auth).expect(404);
+  await request(app)
+    .get(`${base}/checkout`)
+    .set("Authorization", auth)
+    .expect(404);
+  await request(app)
+    .post(`${base}/checkout/actions`)
+    .set("Authorization", auth)
+    .send({ action: "succeed", expectedRevision: 0 })
+    .expect(404);
+  await request(app)
+    .post(base)
+    .set("Content-Type", "application/json")
+    .send("{")
+    .expect(404);
+
+  const { body } = await request(app)
+    .get("/api/subscription")
+    .set("Authorization", auth)
+    .expect(200);
+  assert.equal(body.plan, "free");
+  assert.equal(body.status, null);
 });
