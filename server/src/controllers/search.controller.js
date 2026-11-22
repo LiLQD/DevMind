@@ -3,7 +3,7 @@ import SearchLog from "../models/SearchLog.js";
 import {
   generateQueryEmbedding,
   cosineSimilarity,
-} from "../services/embedding.service.js";
+} from "../services/embedding.service.ts";
 
 export const semanticSearch = async (req, res) => {
   try {
