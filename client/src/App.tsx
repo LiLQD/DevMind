@@ -27,6 +27,28 @@ type NotePayload = {
   tags: string[];
   collections?: string[];
 };
+type DraftFields = {
+  title: string;
+  content: string;
+  tags: string;
+  collectionId: string;
+};
+type Editor = { note: Note | null; initial: DraftFields; version: number };
+
+function draftFields(note?: Note): DraftFields {
+  const legacyCollection = note?.collection;
+  return {
+    title: note?.title || "",
+    content: note?.content || "",
+    tags: note?.tags?.map((tag) => tag.name || tag).join(", ") || "",
+    collectionId:
+      note?.collections?.[0]?._id ||
+      (typeof legacyCollection === "string"
+        ? legacyCollection
+        : legacyCollection?._id) ||
+      "",
+  };
+}
 type ResourceResponse<T, Key extends string> = (
   | T
   | Record<Key, T>
@@ -75,6 +97,11 @@ function App() {
     null,
   );
   const [deleteTarget, setDeleteTarget] = useState<Note | null>(null);
+  const [editor, setEditor] = useState<Editor | null>(null);
+  const [showMobileDetail, setShowMobileDetail] = useState(false);
+  const [discardAction, setDiscardAction] = useState<{
+    run: () => void;
+  } | null>(null);
 
   // --- Loading states ---
   const [isLoadingNotes, setIsLoadingNotes] = useState(false);
@@ -83,7 +110,6 @@ function App() {
   const [isCreatingNote, setIsCreatingNote] = useState(false);
   const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
   const [isLoadingNote, setIsLoadingNote] = useState(false);
-  const [isEditingNote, setIsEditingNote] = useState(false);
   const [isUpdatingNote, setIsUpdatingNote] = useState(false);
   const [isLoadingRelated, setIsLoadingRelated] = useState(false);
 
@@ -100,10 +126,41 @@ function App() {
 
   // --- Refs ---
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const newNoteButtonRef = useRef<HTMLButtonElement>(null);
+  const noteListRef = useRef<HTMLDivElement>(null);
+  const detailRef = useRef<HTMLElement>(null);
+  const browseScrollRef = useRef(0);
+  const editorOpenerRef = useRef<{
+    element: HTMLElement | null;
+    inBrowse: boolean;
+  } | null>(null);
+  const dialogOpenerRef = useRef<HTMLElement | null>(null);
+  const noteRequestRef = useRef(0);
   const exportRequestRef = useRef<AbortController | null>(null);
   const notificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+
+  const isEditingNote = editor?.note != null;
+  const isSavingNote = isCreatingNote || isUpdatingNote;
+  const isDraftModified = Boolean(
+    editor &&
+    (title !== editor.initial.title ||
+      content !== editor.initial.content ||
+      tagInput !== editor.initial.tags ||
+      selectedCollectionId !== editor.initial.collectionId ||
+      newCollectionName),
+  );
+
+  useEffect(() => {
+    if (!isDraftModified) return;
+    const preventDiscard = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = true;
+    };
+    window.addEventListener("beforeunload", preventDiscard);
+    return () => window.removeEventListener("beforeunload", preventDiscard);
+  }, [isDraftModified]);
 
   // --- Notification helper ---
   const showNotification = (
@@ -189,6 +246,12 @@ function App() {
   };
 
   const handleLogout = () => {
+    noteRequestRef.current++;
+    resetEditor();
+    setShowMobileDetail(false);
+    setIsLoadingNote(false);
+    setIsLoadingRelated(false);
+    browseScrollRef.current = 0;
     exportRequestRef.current?.abort();
     exportRequestRef.current = null;
     setIsExportingNotes(false);
@@ -325,14 +388,14 @@ function App() {
           .filter(Boolean),
       };
       if (selectedCollectionId) payload.collections = [selectedCollectionId];
-      await apiRequest("/notes", {
+      const data = await apiRequest<ResourceResponse<Note, "note">>("/notes", {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      setTitle("");
-      setContent("");
-      setTagInput("");
-      setSelectedCollectionId("");
+      setSelectedNote(unwrapResource<Note, "note">(data, "note"));
+      setRelatedNotes([]);
+      resetEditor();
+      openWorkspace();
       await fetchNotes();
       showNotification("Note created.", "success");
     } catch (err) {
@@ -344,7 +407,7 @@ function App() {
 
   const updateNote = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!selectedNote || !title.trim() || !content.trim()) {
+    if (!editor?.note || !title.trim() || !content.trim()) {
       showNotification("Title and content are required.", "error");
       return;
     }
@@ -360,19 +423,22 @@ function App() {
       };
       if (selectedCollectionId) payload.collections = [selectedCollectionId];
       const data = await apiRequest<ResourceResponse<Note, "note">>(
-        `/notes/${selectedNote._id}`,
+        `/notes/${editor.note._id}`,
         {
           method: "PUT",
           body: JSON.stringify(payload),
         },
       );
       const updated = unwrapResource<Note, "note">(data, "note");
+      if (selectedNote?._id !== updated._id) setRelatedNotes([]);
       setSelectedNote(updated);
-      setIsEditingNote(false);
-      setTitle("");
-      setContent("");
-      setTagInput("");
-      setSelectedCollectionId("");
+      setSearchResults((results) =>
+        results.map((note) =>
+          note._id === updated._id ? { ...note, ...updated } : note,
+        ),
+      );
+      resetEditor();
+      openWorkspace();
       await fetchNotes();
       showNotification("Note updated.", "success");
     } catch (err) {
@@ -389,11 +455,19 @@ function App() {
     try {
       await apiRequest(`/notes/${targetId}`, { method: "DELETE" });
       if (selectedNote?._id === targetId) {
+        noteRequestRef.current++;
+        setIsLoadingNote(false);
+        setIsLoadingRelated(false);
         setSelectedNote(null);
         setRelatedNotes([]);
+        if (!editor) showBrowse();
       }
+      setSearchResults((results) =>
+        results.filter((note) => note._id !== targetId),
+      );
       setDeleteTarget(null);
       await fetchNotes();
+      restoreFocus(dialogOpenerRef.current);
       showNotification("Note deleted.", "success");
     } catch (err) {
       showNotification(errorMessage(err), "error");
@@ -403,21 +477,27 @@ function App() {
   };
 
   const viewNote = async (id: string) => {
-    if (isEditingNote) cancelEditNote();
+    const request = ++noteRequestRef.current;
+    openWorkspace();
     setIsLoadingNote(true);
     setIsLoadingRelated(true);
     try {
       const data = await apiRequest<
         ResourceResponse<NoteDetail, "note"> & { relatedNotes?: Note[] }
       >(`/notes/${id}`);
+      if (request !== noteRequestRef.current) return;
       const note = unwrapResource<NoteDetail, "note">(data, "note");
       setSelectedNote(note);
       setRelatedNotes(data.relatedNotes || note.relatedNotes || []);
     } catch {
-      showNotification("Failed to load note.", "error");
+      if (request === noteRequestRef.current) {
+        showNotification("Failed to load note.", "error");
+      }
     } finally {
-      setIsLoadingNote(false);
-      setIsLoadingRelated(false);
+      if (request === noteRequestRef.current) {
+        setIsLoadingNote(false);
+        setIsLoadingRelated(false);
+      }
     }
   };
 
@@ -463,25 +543,54 @@ function App() {
     setIsSearching(false);
   };
 
-  // --- Edit helpers ---
-  const beginEditNote = (note: Note) => {
-    setSelectedNote(note);
-    setIsEditingNote(true);
-    setTitle(note.title || "");
-    setContent(note.content || "");
-    const tags = (note.tags || []).map((t) => t.name || t).join(", ");
-    setTagInput(tags);
-    const collectionId =
-      typeof note.collection === "string"
-        ? note.collection
-        : note.collection?._id || "";
-    setSelectedCollectionId(collectionId);
-    window.requestAnimationFrame(() =>
-      document.querySelector<HTMLInputElement>("#note-title")?.focus(),
-    );
+  // --- Workspace navigation ---
+  const openWorkspace = (focusTitle = false) => {
+    const list = noteListRef.current;
+    if (list?.getClientRects().length) browseScrollRef.current = list.scrollTop;
+    setShowMobileDetail(true);
+    window.requestAnimationFrame(() => {
+      if (detailRef.current) detailRef.current.scrollTop = 0;
+      const target = focusTitle
+        ? document.getElementById("note-title")
+        : detailRef.current;
+      target?.focus({ preventScroll: true });
+    });
   };
-  const cancelEditNote = () => {
-    setIsEditingNote(false);
+
+  const showBrowse = (focusSearch = false) => {
+    const isMobile = window.matchMedia("(max-width: 800px)").matches;
+    if (isMobile || !focusSearch) setShowMobileDetail(false);
+    window.requestAnimationFrame(() => {
+      const list = noteListRef.current;
+      if (isMobile && showMobileDetail && list)
+        list.scrollTop = browseScrollRef.current;
+      const target = focusSearch
+        ? searchInputRef.current
+        : (list?.querySelector<HTMLElement>('[aria-current="true"]') ??
+          newNoteButtonRef.current);
+      target?.focus({ preventScroll: true });
+    });
+  };
+
+  const restoreFocus = (opener: HTMLElement | null, detailAction?: string) => {
+    window.requestAnimationFrame(() => {
+      const detailControl = detailAction
+        ? detailRef.current?.querySelector<HTMLElement>(detailAction)
+        : null;
+      const target = [
+        opener,
+        detailControl,
+        newNoteButtonRef.current,
+        detailRef.current,
+      ].find(
+        (element) => element?.isConnected && element.getClientRects().length,
+      );
+      target?.focus({ preventScroll: true });
+    });
+  };
+
+  const resetEditor = () => {
+    setEditor(null);
     setTitle("");
     setContent("");
     setTagInput("");
@@ -489,24 +598,94 @@ function App() {
     setNewCollectionName("");
   };
 
+  const leaveEditor = (run: () => void) => {
+    if (isSavingNote || deleteTarget || discardAction) return;
+    const discard = () => {
+      resetEditor();
+      run();
+    };
+    if (isDraftModified) {
+      dialogOpenerRef.current = document.activeElement as HTMLElement | null;
+      setDiscardAction({ run: discard });
+    } else {
+      discard();
+    }
+  };
+
+  const beginEditor = (note?: Note) => {
+    const opener = document.activeElement as HTMLElement | null;
+    const inBrowse = Boolean(opener?.closest(".sidebar"));
+    leaveEditor(() => {
+      const version = ++noteRequestRef.current;
+      setIsLoadingNote(false);
+      setIsLoadingRelated(false);
+      const initial = draftFields(note);
+      setEditor({ note: note ?? null, initial, version });
+      editorOpenerRef.current = { element: opener, inBrowse };
+      setTitle(initial.title);
+      setContent(initial.content);
+      setTagInput(initial.tags);
+      setSelectedCollectionId(initial.collectionId);
+      openWorkspace(true);
+    });
+  };
+
+  const cancelEditor = () => {
+    const opener = editorOpenerRef.current;
+    leaveEditor(() => {
+      if (opener?.inBrowse || !selectedNote) showBrowse();
+      restoreFocus(
+        opener?.element ?? null,
+        opener?.inBrowse
+          ? undefined
+          : selectedNote
+            ? ".note-header-actions .secondary-btn"
+            : ".main-empty .primary-btn",
+      );
+    });
+  };
+
+  const selectNote = (id: string) => {
+    leaveEditor(() => void viewNote(id));
+  };
+
+  const requestDelete = (note: Note) => {
+    if (isSavingNote || discardAction || deleteTarget) return;
+    const opener = document.activeElement as HTMLElement | null;
+    const openDialog = () => {
+      dialogOpenerRef.current = opener;
+      setDeleteTarget(note);
+    };
+    if (editor?.note?._id === note._id) leaveEditor(openDialog);
+    else openDialog();
+  };
+
+  const cancelDelete = () => {
+    setDeleteTarget(null);
+    restoreFocus(dialogOpenerRef.current);
+  };
+
+  const keepDraft = () => {
+    setDiscardAction(null);
+    restoreFocus(dialogOpenerRef.current);
+  };
+
   // --- Keyboard shortcuts ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!token || deleteTarget || discardAction) return;
       const mod = e.ctrlKey || e.metaKey;
       const isTyping = ["input", "textarea"].includes(
         document.activeElement?.tagName?.toLowerCase() ?? "",
       );
       if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        searchInputRef.current?.focus();
+        showBrowse(true);
         return;
       }
       if (mod && e.key.toLowerCase() === "n") {
         e.preventDefault();
-        cancelEditNote();
-        window.requestAnimationFrame(() =>
-          document.querySelector<HTMLInputElement>("#note-title")?.focus(),
-        );
+        beginEditor();
         return;
       }
       if (
@@ -515,25 +694,31 @@ function App() {
         document.activeElement?.closest(".create-panel")
       ) {
         e.preventDefault();
-        document
-          .querySelector<HTMLFormElement>(".create-form")
-          ?.requestSubmit();
+        if (!isSavingNote) {
+          detailRef.current
+            ?.querySelector<HTMLFormElement>(".create-form")
+            ?.requestSubmit();
+        }
         return;
       }
-      if (mod && e.key === "Delete" && selectedNote && !isTyping) {
+      const deleteShortcutTarget = editor?.note ?? selectedNote;
+      if (mod && e.key === "Delete" && deleteShortcutTarget && !isTyping) {
         e.preventDefault();
-        setDeleteTarget(selectedNote);
+        requestDelete(deleteShortcutTarget);
         return;
       }
       if (e.key === "Escape") {
-        if (deleteTarget) setDeleteTarget(null);
-        else if (isEditingNote) cancelEditNote();
+        if (
+          editor &&
+          (showMobileDetail || !window.matchMedia("(max-width: 800px)").matches)
+        )
+          cancelEditor();
         else if (isSearching) clearSearch();
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [deleteTarget, isSearching, isEditingNote, selectedNote]);
+  });
 
   // --- Effects ---
   useEffect(() => {
@@ -581,80 +766,128 @@ function App() {
         onToggleTheme={() =>
           setTheme((t) => (t === "light" ? "dark" : "light"))
         }
-        onLogout={handleLogout}
+        onLogout={() => leaveEditor(handleLogout)}
       />
 
-      <div className="workspace">
+      <main
+        className={`workspace ${showMobileDetail ? "workspace-show-detail" : ""}`}
+        aria-label="Notes workspace"
+      >
         <Sidebar
           notes={displayNotes}
           exactSearchQuery={isSearching ? exactSearchQuery : ""}
-          selectedNoteId={selectedNote?._id}
-          isLoading={isLoadingNotes}
+          selectedNoteId={editor?.note?._id ?? selectedNote?._id}
+          isLoading={isLoadingNotes && displayNotes.length === 0}
           isSearching={isSearching}
-          onViewNote={viewNote}
-          onEditNote={beginEditNote}
-          onDeleteNote={setDeleteTarget}
+          searchMode={searchMode}
+          noteListRef={noteListRef}
+          newNoteButtonRef={newNoteButtonRef}
+          onNewNote={() => beginEditor()}
+          onResumeDraft={
+            editor && !showMobileDetail ? () => openWorkspace(true) : undefined
+          }
+          onViewNote={selectNote}
+          onEditNote={beginEditor}
+          onDeleteNote={requestDelete}
           collections={collections}
           selectedCollectionFilter={selectedCollectionFilter}
           setSelectedCollectionFilter={setSelectedCollectionFilter}
+          search={
+            <SearchBar
+              mode={searchMode}
+              setMode={(mode) => {
+                setSearchMode(mode);
+                setSearchResults([]);
+                setIsSearching(false);
+              }}
+              query={query}
+              setQuery={setQuery}
+              onSearch={handleSearch}
+              onClearSearch={clearSearch}
+              isSearchingAI={isSearchingAI}
+              searchInputRef={searchInputRef}
+            />
+          }
         />
 
-        <main className="main-pane" aria-label="Notes workspace">
-          <SearchBar
-            mode={searchMode}
-            setMode={(mode) => {
-              setSearchMode(mode);
-              setSearchResults([]);
-              setIsSearching(false);
-            }}
-            query={query}
-            setQuery={setQuery}
-            onSearch={handleSearch}
-            onClearSearch={clearSearch}
-            isSearchingAI={isSearchingAI}
-            searchInputRef={searchInputRef}
-          />
+        <section
+          className="main-pane"
+          ref={detailRef}
+          tabIndex={-1}
+          aria-label="Note detail"
+        >
+          {!editor && (
+            <button
+              type="button"
+              className="secondary-btn workspace-back"
+              onClick={() => showBrowse()}
+            >
+              Back to notes
+            </button>
+          )}
+          {editor ? (
+            <CreatePanel
+              key={editor.version}
+              isEditing={isEditingNote}
+              title={title}
+              setTitle={setTitle}
+              content={content}
+              setContent={setContent}
+              tagInput={tagInput}
+              setTagInput={setTagInput}
+              onSubmit={isEditingNote ? updateNote : createNote}
+              onCancel={cancelEditor}
+              isSaving={isSavingNote}
+              submitLabel={isEditingNote ? "Save changes" : "Save note"}
+              collections={collections}
+              selectedCollectionId={selectedCollectionId}
+              setSelectedCollectionId={setSelectedCollectionId}
+              newCollectionName={newCollectionName}
+              setNewCollectionName={setNewCollectionName}
+              onCreateCollection={createCollection}
+            />
+          ) : (
+            <NoteView
+              selectedNote={selectedNote}
+              relatedNotes={relatedNotes}
+              isLoadingNote={isLoadingNote}
+              isLoadingRelated={isLoadingRelated}
+              onViewNote={selectNote}
+              onCreateNote={() => beginEditor()}
+              hasNotes={notes.length > 0 || Boolean(selectedCollectionFilter)}
+              onEditNote={beginEditor}
+              onDeleteNote={requestDelete}
+              deletingNoteId={deletingNoteId}
+            />
+          )}
+        </section>
+      </main>
 
-          <NoteView
-            selectedNote={selectedNote}
-            relatedNotes={relatedNotes}
-            isLoadingNote={isLoadingNote}
-            isLoadingRelated={isLoadingRelated}
-            onViewNote={viewNote}
-            onDeleteNote={() => setDeleteTarget(selectedNote)}
-            deletingNoteId={deletingNoteId}
-          />
-        </main>
-
-        <CreatePanel
-          key={isEditingNote ? "edit" : "new"}
-          isEditing={isEditingNote}
-          title={title}
-          setTitle={setTitle}
-          content={content}
-          setContent={setContent}
-          tagInput={tagInput}
-          setTagInput={setTagInput}
-          onSubmit={isEditingNote ? updateNote : createNote}
-          onCancel={cancelEditNote}
-          isSaving={isEditingNote ? isUpdatingNote : isCreatingNote}
-          submitLabel={isEditingNote ? "Save changes" : "Save note"}
-          collections={collections}
-          selectedCollectionId={selectedCollectionId}
-          setSelectedCollectionId={setSelectedCollectionId}
-          newCollectionName={newCollectionName}
-          setNewCollectionName={setNewCollectionName}
-          onCreateCollection={createCollection}
+      {discardAction && (
+        <ConfirmModal
+          title="Discard unsaved changes?"
+          description="Your changes will be lost."
+          cancelLabel="Keep editing"
+          confirmLabel="Discard changes"
+          onConfirm={() => {
+            setDiscardAction(null);
+            discardAction.run();
+          }}
+          onCancel={keepDraft}
         />
-      </div>
-
-      <ConfirmModal
-        isOpen={!!deleteTarget}
-        title={deleteTarget?.title || ""}
-        onConfirm={deleteNote}
-        onCancel={() => setDeleteTarget(null)}
-        isDeleting={deletingNoteId === deleteTarget?._id}
-      />
+      )}
+      {deleteTarget && (
+        <ConfirmModal
+          title={`Delete “${deleteTarget.title}”?`}
+          description="This action cannot be undone."
+          confirmLabel={
+            deletingNoteId === deleteTarget._id ? "Deleting…" : "Delete note"
+          }
+          onConfirm={deleteNote}
+          onCancel={cancelDelete}
+          isBusy={deletingNoteId === deleteTarget._id}
+        />
+      )}
     </div>
   );
 }

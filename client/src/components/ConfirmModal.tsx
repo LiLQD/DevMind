@@ -1,51 +1,68 @@
+import { useEffect, useId, useRef } from "react";
+
 type ConfirmModalProps = {
-  isOpen: boolean;
   title: string;
+  description: string;
+  confirmLabel: string;
+  cancelLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
-  isDeleting: boolean;
+  isBusy?: boolean;
 };
 
 export default function ConfirmModal({
-  isOpen,
   title,
+  description,
+  confirmLabel,
+  cancelLabel = "Cancel",
   onConfirm,
   onCancel,
-  isDeleting,
+  isBusy = false,
 }: ConfirmModalProps) {
-  if (!isOpen) return null;
+  const titleId = useId();
+  const descriptionId = useId();
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    dialog?.showModal();
+    cancelRef.current?.focus();
+    return () => dialog?.close();
+  }, []);
+
   return (
-    <div className="modal-backdrop" role="presentation">
-      <div
-        className="confirm-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="delete-title"
-      >
-        <div>
-          <div className="eyebrow">Delete note</div>
-          <h2 id="delete-title">Delete “{title}”?</h2>
-          <p>This action cannot be undone.</p>
-        </div>
-        <div className="modal-actions">
-          <button
-            type="button"
-            className="secondary-btn"
-            onClick={onCancel}
-            disabled={isDeleting}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="danger-solid-btn"
-            onClick={onConfirm}
-            disabled={isDeleting}
-          >
-            {isDeleting ? "Deleting…" : "Delete note"}
-          </button>
-        </div>
+    <dialog
+      ref={dialogRef}
+      className="confirm-modal"
+      aria-labelledby={titleId}
+      aria-describedby={descriptionId}
+      onCancel={(event) => {
+        event.preventDefault();
+        if (!isBusy) onCancel();
+      }}
+    >
+      <h2 id={titleId}>{title}</h2>
+      <p id={descriptionId}>{description}</p>
+      <div className="modal-actions">
+        <button
+          ref={cancelRef}
+          type="button"
+          className="secondary-btn"
+          onClick={onCancel}
+          disabled={isBusy}
+        >
+          {cancelLabel}
+        </button>
+        <button
+          type="button"
+          className="danger-solid-btn"
+          onClick={onConfirm}
+          disabled={isBusy}
+        >
+          {confirmLabel}
+        </button>
       </div>
-    </div>
+    </dialog>
   );
 }
