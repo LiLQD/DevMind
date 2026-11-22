@@ -1,4 +1,4 @@
-import Tag from "../models/Tag.js";
+import Tag from "../models/Tag.ts";
 import Note from "../models/Note.js";
 import {
   generateEmbedding,
