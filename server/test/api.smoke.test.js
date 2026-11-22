@@ -220,6 +220,26 @@ async function register(email) {
   return `Bearer ${response.body.token}`;
 }
 
+test("rejects duplicate registration and incorrect login credentials", async () => {
+  const email = "registered@example.com";
+  await register(email);
+
+  await request(app)
+    .post("/api/auth/register")
+    .send({ email, password: "password123", name: "Duplicate Account" })
+    .expect(400, { message: "Email đã tồn tại" });
+
+  for (const credentials of [
+    { email, password: "wrong-password" },
+    { email: "missing@example.com", password: "password123" },
+  ]) {
+    await request(app)
+      .post("/api/auth/login")
+      .send(credentials)
+      .expect(401, { message: "Email hoặc mật khẩu không đúng" });
+  }
+});
+
 async function createNote(auth, content = "Original content") {
   const response = await request(app)
     .post("/api/notes")
