@@ -1,10 +1,18 @@
+type ConfirmModalProps = {
+  isOpen: boolean;
+  title: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  isDeleting: boolean;
+};
+
 export default function ConfirmModal({
   isOpen,
   title,
   onConfirm,
   onCancel,
   isDeleting,
-}) {
+}: ConfirmModalProps) {
   if (!isOpen) return null;
   return (
     <div className="modal-backdrop" role="presentation">
