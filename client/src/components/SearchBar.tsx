@@ -1,4 +1,13 @@
-import React from "react";
+import type { FormEventHandler, Ref } from "react";
+
+type SearchBarProps = {
+  query: string;
+  setQuery: (query: string) => void;
+  onSearch: FormEventHandler<HTMLFormElement>;
+  onClearSearch: () => void;
+  isSearchingAI: boolean;
+  searchInputRef: Ref<HTMLInputElement>;
+};
 
 export default function SearchBar({
   query,
@@ -7,7 +16,7 @@ export default function SearchBar({
   onClearSearch,
   isSearchingAI,
   searchInputRef,
-}) {
+}: SearchBarProps) {
   return (
     <div className="search-bar-container">
       <form onSubmit={onSearch} className="search-bar-form">

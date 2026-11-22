@@ -1,7 +1,17 @@
-import React from "react";
+import type { Note } from "../types";
+
+type NoteViewProps = {
+  selectedNote: Note | null;
+  relatedNotes: Note[];
+  isLoadingNote: boolean;
+  isLoadingRelated: boolean;
+  onViewNote: (id: string) => void;
+  onDeleteNote: () => void;
+  deletingNoteId: string | null;
+};
 
 // Helper to format date as "Aug 23, 2026"
-function formatDate(dateString) {
+function formatDate(dateString: string) {
   const date = new Date(dateString);
   return date.toLocaleDateString("en-US", {
     month: "short",
@@ -18,7 +28,7 @@ export default function NoteView({
   onViewNote,
   onDeleteNote,
   deletingNoteId,
-}) {
+}: NoteViewProps) {
   if (isLoadingNote) {
     return (
       <main className="main-pane">

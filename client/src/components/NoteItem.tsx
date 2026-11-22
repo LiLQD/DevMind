@@ -1,7 +1,15 @@
-import React from "react";
+import type { Note } from "../types";
+
+type NoteItemProps = {
+  note: Note;
+  isActive: boolean;
+  onView: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+};
 
 // Helper to format date as "Aug 23"
-function formatDate(dateString) {
+function formatDate(dateString: string) {
   const date = new Date(dateString);
   return date.toLocaleDateString("en-US", {
     month: "short",
@@ -9,7 +17,13 @@ function formatDate(dateString) {
   });
 }
 
-export default function NoteItem({ note, isActive, onView, onEdit, onDelete }) {
+export default function NoteItem({
+  note,
+  isActive,
+  onView,
+  onEdit,
+  onDelete,
+}: NoteItemProps) {
   return (
     <div
       className={`note-item ${isActive ? "active" : ""}`}

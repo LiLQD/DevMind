@@ -1,4 +1,28 @@
-import React, { useRef, useState } from "react";
+import { useRef, useState } from "react";
+import type { ChangeEvent, FormEventHandler, MouseEvent } from "react";
+import type { Collection } from "../types";
+
+type CollectionOption = Partial<Collection> & { id?: string };
+
+type CreatePanelProps = {
+  isEditing: boolean;
+  title: string;
+  setTitle: (title: string) => void;
+  content: string;
+  setContent: (content: string) => void;
+  tagInput: string;
+  setTagInput: (tags: string) => void;
+  onSubmit: FormEventHandler<HTMLFormElement>;
+  onCancel: () => void;
+  isSaving: boolean;
+  submitLabel: string;
+  collections?: CollectionOption[];
+  selectedCollectionId?: string;
+  setSelectedCollectionId: (id: string) => void;
+  newCollectionName: string;
+  setNewCollectionName: (name: string) => void;
+  onCreateCollection: (name: string) => Promise<CollectionOption | null>;
+};
 
 export default function CreatePanel({
   isEditing,
@@ -18,16 +42,16 @@ export default function CreatePanel({
   newCollectionName,
   setNewCollectionName,
   onCreateCollection,
-}) {
+}: CreatePanelProps) {
   const [isCreatingCollection, setIsCreatingCollection] = useState(false);
-  const collectionInputRef = useRef(null);
+  const collectionInputRef = useRef<HTMLInputElement>(null);
 
-  const getCollectionId = (collection) =>
+  const getCollectionId = (collection: CollectionOption) =>
     String(collection?._id ?? collection?.id ?? "");
-  const getCollectionName = (collection) =>
+  const getCollectionName = (collection: CollectionOption) =>
     collection?.name ?? "Untitled collection";
 
-  const handleCollectionChange = (event) => {
+  const handleCollectionChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const value = event.target.value;
     if (value === "__create_collection__") {
       setIsCreatingCollection(true);
@@ -39,7 +63,9 @@ export default function CreatePanel({
     }
   };
 
-  const handleCreateCollection = async (event) => {
+  const handleCreateCollection = async (
+    event: MouseEvent<HTMLButtonElement>,
+  ) => {
     event.preventDefault();
     const name = newCollectionName.trim();
     if (!name) {
