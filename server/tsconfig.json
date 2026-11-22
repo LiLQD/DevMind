@@ -13,6 +13,7 @@
     "rewriteRelativeImportExtensions": true
   },
   "files": [
+    "src/app.ts",
     "src/config/env.ts",
     "src/config/redis.ts",
     "src/controllers/auth.controller.ts",

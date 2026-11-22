@@ -1,5 +1,5 @@
 import { env } from "./config/env.ts";
-import app from "./app.js";
+import app from "./app.ts";
 import mongoose from "mongoose";
 import redis from "./config/redis.ts";
 

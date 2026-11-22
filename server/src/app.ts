@@ -1,4 +1,5 @@
 import express from "express";
+import type { NextFunction, Request, Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import mongoose from "mongoose";
@@ -110,25 +111,37 @@ export function createApp() {
   });
 
   // Error handler
-  app.use((err, req, res, _next) => {
-    console.error("Error:", err);
-    const status = Number.isInteger(err.statusCode)
-      ? err.statusCode
-      : Number.isInteger(err.status)
-        ? err.status
-        : 500;
-    const isServerError = status >= 500;
-
-    res.status(status).json({
-      success: false,
-      error: {
-        code: isServerError ? "INTERNAL_ERROR" : err.code || "REQUEST_ERROR",
-        message: isServerError
-          ? "Internal server error"
-          : err.message || "Request failed",
+  app.use(
+    (
+      err: {
+        statusCode?: unknown;
+        status?: unknown;
+        code?: unknown;
+        message?: unknown;
       },
-    });
-  });
+      _req: Request,
+      res: Response,
+      _next: NextFunction,
+    ) => {
+      console.error("Error:", err);
+      const status = isInteger(err.statusCode)
+        ? err.statusCode
+        : isInteger(err.status)
+          ? err.status
+          : 500;
+      const isServerError = status >= 500;
+
+      res.status(status).json({
+        success: false,
+        error: {
+          code: isServerError ? "INTERNAL_ERROR" : err.code || "REQUEST_ERROR",
+          message: isServerError
+            ? "Internal server error"
+            : err.message || "Request failed",
+        },
+      });
+    },
+  );
 
   console.log("App configured");
 
@@ -136,3 +149,7 @@ export function createApp() {
 }
 
 export default createApp();
+
+function isInteger(value: unknown): value is number {
+  return Number.isInteger(value);
+}

@@ -202,7 +202,7 @@ mock.module(moduleUrl("src/services/embedding.service.ts"), {
   },
 });
 
-const { default: app } = await import("../src/app.js");
+const { default: app } = await import("../src/app.ts");
 
 beforeEach(() => {
   accounts.length = 0;
