@@ -12,6 +12,7 @@ import staffRoutes from "./routes/staff.routes.ts";
 import tagRoutes from "./routes/tag.routes.ts";
 import collectionRoutes from "./routes/collection.routes.ts";
 import subscriptionRoutes from "./routes/subscription.routes.ts";
+import mockBillingRoutes from "./routes/mockBilling.routes.ts";
 
 import { generalLimiter, searchLimiter } from "./middleware/rateLimiter.ts";
 import redis from "./config/redis.ts";
@@ -24,6 +25,7 @@ export function createApp() {
 
   // Middleware
   app.use(helmet());
+  if (!env.MOCK_BILLING_ENABLED) app.use("/api/mock-billing", notFound);
   app.use(
     cors({
       origin: (origin, callback) => {
@@ -97,20 +99,14 @@ export function createApp() {
   app.use("/api/tags", tagRoutes);
   app.use("/api/collections", collectionRoutes);
   app.use("/api/subscription", subscriptionRoutes);
+  if (env.MOCK_BILLING_ENABLED) {
+    app.use("/api/mock-billing", mockBillingRoutes);
+  }
 
   console.log("Routes mounted");
 
   // 404 handler
-  app.use((req, res) => {
-    console.log(`404: ${req.method} ${req.url}`);
-    res.status(404).json({
-      success: false,
-      error: {
-        code: "NOT_FOUND",
-        message: `Không tìm thấy endpoint ${req.method} ${req.url}`,
-      },
-    });
-  });
+  app.use(notFound);
 
   // Error handler
   app.use(
@@ -151,6 +147,17 @@ export function createApp() {
 }
 
 export default createApp();
+
+function notFound(req: Request, res: Response) {
+  console.log(`404: ${req.method} ${req.originalUrl}`);
+  res.status(404).json({
+    success: false,
+    error: {
+      code: "NOT_FOUND",
+      message: `Không tìm thấy endpoint ${req.method} ${req.originalUrl}`,
+    },
+  });
+}
 
 function isInteger(value: unknown): value is number {
   return Number.isInteger(value);

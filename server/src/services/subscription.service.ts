@@ -1,12 +1,18 @@
 import type { Types } from "mongoose";
+import { env } from "../config/env.ts";
 import { plans } from "../config/plans.ts";
 import type { Plan } from "../config/plans.ts";
 import Subscription from "../models/Subscription.ts";
 
 export async function getAccountSubscription(accountId: Types.ObjectId) {
-  const subscription = await Subscription.findOne({ accountId })
-    .select("plan status currentPeriodEnd cancelAtPeriodEnd")
+  const record = await Subscription.findOne({ accountId })
+    .select("billingProvider plan status currentPeriodEnd cancelAtPeriodEnd")
     .lean();
+  const subscription =
+    record?.billingProvider === "mock" &&
+    (!env.MOCK_BILLING_ENABLED || record.plan === "free")
+      ? null
+      : record;
   const now = new Date();
   const periodEnd = subscription?.currentPeriodEnd ?? null;
   const hasProAccess =

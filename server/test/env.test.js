@@ -46,9 +46,25 @@ test("loads required settings and development defaults", (t) => {
     ...required,
     PORT: 8080,
     NODE_ENV: "development",
+    MOCK_BILLING_ENABLED: false,
     CORS_ORIGINS: ["http://localhost:5173"],
     TRUST_PROXY: false,
   });
+});
+
+test("mock billing requires an explicit development environment and opt-in", (t) => {
+  for (const [settings, enabled] of [
+    [{ ENABLE_MOCK_BILLING: "true" }, false],
+    [{ NODE_ENV: "production", ENABLE_MOCK_BILLING: "true" }, false],
+    [{ NODE_ENV: "test", ENABLE_MOCK_BILLING: "true" }, false],
+    [{ NODE_ENV: "development", ENABLE_MOCK_BILLING: "1" }, false],
+    [{ NODE_ENV: "development", ENABLE_MOCK_BILLING: "true" }, true],
+  ]) {
+    assert.equal(
+      readEnv(t, { ...required, ...settings }).MOCK_BILLING_ENABLED,
+      enabled,
+    );
+  }
 });
 
 test("uses production CORS and proxy defaults", (t) => {
