@@ -1,6 +1,7 @@
 import type { RequestHandler } from "express";
 import Note from "../models/Note.ts";
 import SearchLog from "../models/SearchLog.ts";
+import { recordUsage } from "../services/usage.service.ts";
 import {
   generateQueryEmbedding,
   cosineSimilarity,
@@ -56,6 +57,7 @@ const semanticSearch: RequestHandler = async (req, res) => {
     // 2. Generate query embedding
     let queryEmbedding;
     try {
+      await recordUsage(req.user!.id, "semanticSearchRequests");
       queryEmbedding = await generateQueryEmbedding(query);
       if (!queryEmbedding) {
         return res

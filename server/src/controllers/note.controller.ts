@@ -2,6 +2,7 @@ import type { Request, RequestHandler } from "express";
 import type { Types } from "mongoose";
 import Tag from "../models/Tag.ts";
 import Note from "../models/Note.ts";
+import { recordUsage } from "../services/usage.service.ts";
 import {
   generateEmbedding,
   cosineSimilarity,
@@ -66,6 +67,7 @@ export const createNote: RequestHandler<
     await note.save();
 
     try {
+      await recordUsage(req.user!.id, "noteEmbeddingRequests");
       const embedding = await generateEmbedding(content);
       if (embedding) {
         note.embedding = embedding;
@@ -199,6 +201,7 @@ export const updateNote: RequestHandler<NoteParams, unknown, NoteBody> = async (
     if (contentChanged) {
       note.embeddingStatus = "pending";
       try {
+        await recordUsage(req.user!.id, "noteEmbeddingRequests");
         const embedding = await generateEmbedding(content);
         if (embedding) {
           note.embedding = embedding;
