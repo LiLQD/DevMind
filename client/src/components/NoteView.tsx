@@ -1,3 +1,4 @@
+import Markdown from "react-markdown";
 import type { Note } from "../types";
 
 type NoteViewProps = {
@@ -91,7 +92,9 @@ export default function NoteView({
         </div>
 
         {/* Note content */}
-        <article className="note-content">{selectedNote.content}</article>
+        <article className="note-content">
+          <Markdown>{selectedNote.content}</Markdown>
+        </article>
 
         {/* Tags display */}
         {selectedNote.tags && selectedNote.tags.length > 0 && (

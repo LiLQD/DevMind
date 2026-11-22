@@ -243,7 +243,7 @@ export default function CreatePanel({
 
         {/* Content */}
         <label className="form-field form-field-content">
-          <span>Content</span>
+          <span>Content (Markdown)</span>
           <textarea
             ref={contentInputRef}
             placeholder="Write the idea, fix, snippet, or reference you want to remember…"
