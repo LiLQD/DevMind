@@ -24,8 +24,4 @@ export type Note = {
   similarityScore?: number;
 };
 
-export type SearchResult = Note & {
-  semanticScore: number;
-  keywordRatio: number;
-  finalScore: number;
-};
+export type SearchMode = "semantic" | "exact";
