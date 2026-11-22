@@ -14,6 +14,7 @@
   "files": [
     "src/config/env.ts",
     "src/config/redis.ts",
-    "src/middleware/rateLimiter.ts"
+    "src/middleware/rateLimiter.ts",
+    "src/services/embedding.service.ts"
   ]
 }

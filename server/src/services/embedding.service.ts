@@ -4,7 +4,10 @@ import { env } from "../config/env.ts";
 const genAI = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
 // Cosine Similarity
-export function cosineSimilarity(vecA, vecB) {
+export function cosineSimilarity(
+  vecA: readonly number[] | null | undefined,
+  vecB: readonly number[] | null | undefined,
+): number {
   if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
 
   const dotProduct = vecA.reduce((sum, a, i) => sum + a * vecB[i], 0);
@@ -15,7 +18,9 @@ export function cosineSimilarity(vecA, vecB) {
   return dotProduct / (magA * magB);
 }
 
-export async function generateEmbedding(text) {
+export async function generateEmbedding(
+  text: string,
+): Promise<number[] | null> {
   try {
     const response = await genAI.models.embedContent({
       model: "gemini-embedding-001",
@@ -32,7 +37,9 @@ export async function generateEmbedding(text) {
   }
 }
 
-export async function generateQueryEmbedding(text) {
+export async function generateQueryEmbedding(
+  text: string,
+): Promise<number[] | null> {
   try {
     const response = await genAI.models.embedContent({
       model: "gemini-embedding-001",
@@ -49,7 +56,7 @@ export async function generateQueryEmbedding(text) {
   }
 }
 
-export function filterStopWords(text) {
+export function filterStopWords(text: string): string {
   // Simple stop-word filtering
   const stopWords = new Set([
     "the",

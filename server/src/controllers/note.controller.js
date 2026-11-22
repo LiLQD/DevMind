@@ -3,7 +3,7 @@ import Note from "../models/Note.js";
 import {
   generateEmbedding,
   cosineSimilarity,
-} from "../services/embedding.service.js";
+} from "../services/embedding.service.ts";
 
 // Resolve tag names to ObjectIds, creating missing tags for this user.
 const resolveTagIds = async (names, userId) => {
