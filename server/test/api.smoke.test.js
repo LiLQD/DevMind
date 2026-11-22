@@ -171,7 +171,7 @@ mock.module(moduleUrl("src/config/redis.ts"), {
 mock.module("rate-limit-redis", { exports: { default: RedisStore } });
 const defaultEmbedding = async () => [1, 0];
 const generateEmbedding = mock.fn(defaultEmbedding);
-mock.module(moduleUrl("src/services/embedding.service.js"), {
+mock.module(moduleUrl("src/services/embedding.service.ts"), {
   exports: {
     generateEmbedding,
     generateQueryEmbedding: async () => [1, 0],

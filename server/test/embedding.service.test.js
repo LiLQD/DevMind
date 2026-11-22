@@ -19,7 +19,7 @@ mock.module("../src/config/env.ts", {
 });
 
 const { cosineSimilarity, generateEmbedding, generateQueryEmbedding } =
-  await import("../src/services/embedding.service.js");
+  await import("../src/services/embedding.service.ts");
 
 for (const [generate, taskType] of [
   [generateEmbedding, "RETRIEVAL_DOCUMENT"],
