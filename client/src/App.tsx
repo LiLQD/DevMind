@@ -56,6 +56,7 @@ function App() {
   const [relatedNotes, setRelatedNotes] = useState<Note[]>([]);
   const [searchResults, setSearchResults] = useState<Note[]>([]);
   const [searchMode, setSearchMode] = useState<SearchMode>("semantic");
+  const [exactSearchQuery, setExactSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
 
   // --- Collections & Tags ---
@@ -423,7 +424,8 @@ function App() {
   // --- Search ---
   const handleSearch = async (e?: FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
-    if (!query.trim()) {
+    const submittedQuery = query.trim();
+    if (!submittedQuery) {
       showNotification("Enter a search query.", "error");
       return;
     }
@@ -434,10 +436,11 @@ function App() {
         data?: Note[];
       }>("/notes/search", {
         method: "POST",
-        body: JSON.stringify({ query: query.trim(), mode: searchMode }),
+        body: JSON.stringify({ query: submittedQuery, mode: searchMode }),
       });
       const results = data.results || data.data || [];
       setSearchResults(results);
+      setExactSearchQuery(searchMode === "exact" ? submittedQuery : "");
       setIsSearching(true);
       if (results.length === 0)
         showNotification("No matching notes found.", "info");
@@ -584,6 +587,7 @@ function App() {
       <div className="workspace">
         <Sidebar
           notes={displayNotes}
+          exactSearchQuery={isSearching ? exactSearchQuery : ""}
           selectedNoteId={selectedNote?._id}
           isLoading={isLoadingNotes}
           isSearching={isSearching}

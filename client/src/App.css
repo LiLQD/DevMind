@@ -444,6 +444,26 @@ button:disabled {
   text-overflow: ellipsis;
 }
 
+.note-item-top .note-match-title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.note-match-excerpt {
+  margin: 6px 0 0;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.note-match-title mark,
+.note-match-excerpt mark {
+  background: #fce8a3;
+  color: #292010;
+}
+
 .note-item-actions {
   display: flex;
   align-items: center;
@@ -511,6 +531,16 @@ button:disabled {
   color: var(--text-muted);
   font-size: 11px;
   min-width: 0;
+}
+
+.note-match-meta {
+  flex-wrap: wrap;
+}
+
+.note-match-meta .collection-chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .note-chip,
