@@ -1,5 +1,5 @@
-import Markdown from "react-markdown";
 import type { Note } from "../types";
+import NoteMarkdown from "./NoteMarkdown";
 
 type NoteViewProps = {
   selectedNote: Note | null;
@@ -93,7 +93,7 @@ export default function NoteView({
 
         {/* Note content */}
         <article className="note-content">
-          <Markdown>{selectedNote.content}</Markdown>
+          <NoteMarkdown content={selectedNote.content} />
         </article>
 
         {/* Tags display */}
