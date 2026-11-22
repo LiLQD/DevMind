@@ -1,12 +1,10 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "checkJs": false,
     "noEmit": false,
     "noEmitOnError": true,
     "skipLibCheck": true,
     "rootDir": "src",
     "outDir": "dist"
-  },
-  "include": ["src"]
+  }
 }
