@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import type { Collection, Note, SearchResult } from "./types";
+import type { Collection, Note, SearchMode } from "./types";
 import "./App.css";
 
 // Components
@@ -54,7 +54,8 @@ function App() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [relatedNotes, setRelatedNotes] = useState<Note[]>([]);
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchResults, setSearchResults] = useState<Note[]>([]);
+  const [searchMode, setSearchMode] = useState<SearchMode>("semantic");
   const [isSearching, setIsSearching] = useState(false);
 
   // --- Collections & Tags ---
@@ -378,11 +379,11 @@ function App() {
     setIsSearchingAI(true);
     try {
       const data = await apiRequest<{
-        results?: SearchResult[];
-        data?: SearchResult[];
+        results?: Note[];
+        data?: Note[];
       }>("/notes/search", {
         method: "POST",
-        body: JSON.stringify({ query: query.trim() }),
+        body: JSON.stringify({ query: query.trim(), mode: searchMode }),
       });
       const results = data.results || data.data || [];
       setSearchResults(results);
@@ -543,6 +544,12 @@ function App() {
 
         <main className="main-pane">
           <SearchBar
+            mode={searchMode}
+            setMode={(mode) => {
+              setSearchMode(mode);
+              setSearchResults([]);
+              setIsSearching(false);
+            }}
             query={query}
             setQuery={setQuery}
             onSearch={handleSearch}

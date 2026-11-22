@@ -6,7 +6,7 @@ import {
   updateNote,
   deleteNote,
 } from "../controllers/note.controller.ts";
-import { semanticSearch } from "../controllers/search.controller.ts";
+import { searchNotes } from "../controllers/search.controller.ts";
 import { protect } from "../middleware/auth.middleware.ts";
 
 const router = express.Router();
@@ -18,7 +18,7 @@ router.use(protect);
 router.route("/").get(getNotes).post(createNote);
 
 // Semantic search
-router.post("/search", semanticSearch);
+router.post("/search", searchNotes);
 
 // Individual note operations
 router.route("/:id").get(getNote).put(updateNote).delete(deleteNote);
