@@ -152,7 +152,7 @@ mock.module(moduleUrl("src/models/Note.js"), { exports: { default: Note } });
 mock.module(moduleUrl("src/models/Collection.js"), {
   exports: { default: Collection },
 });
-mock.module(moduleUrl("src/models/SearchLog.js"), {
+mock.module(moduleUrl("src/models/SearchLog.ts"), {
   exports: {
     default: class SearchLog {
       async save() {}
