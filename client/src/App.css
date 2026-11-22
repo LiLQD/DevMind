@@ -1281,6 +1281,10 @@ button:disabled {
 }
 
 @media (max-width: 560px) {
+  .topbar,
+  .topbar-right {
+    flex-wrap: wrap;
+  }
   .topbar-left {
     gap: 8px;
   }

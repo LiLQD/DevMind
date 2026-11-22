@@ -4,6 +4,8 @@ type TopBarProps = {
   theme: string;
   onToggleTheme: () => void;
   onLogout: () => void;
+  onExportNotes: () => void;
+  isExportingNotes: boolean;
 };
 
 export default function TopBar({
@@ -12,6 +14,8 @@ export default function TopBar({
   theme,
   onToggleTheme,
   onLogout,
+  onExportNotes,
+  isExportingNotes,
 }: TopBarProps) {
   return (
     <header className="topbar">
@@ -29,6 +33,14 @@ export default function TopBar({
           {theme === "light" ? "Dark" : "Light"}
         </button>
         <span className="account-label">{userLabel}</span>
+        <button
+          type="button"
+          className="secondary-btn"
+          onClick={onExportNotes}
+          disabled={isExportingNotes}
+        >
+          {isExportingNotes ? "Exporting…" : "Export Markdown"}
+        </button>
         <button type="button" className="secondary-btn" onClick={onLogout}>
           Logout
         </button>

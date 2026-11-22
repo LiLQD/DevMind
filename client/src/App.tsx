@@ -77,6 +77,7 @@ function App() {
 
   // --- Loading states ---
   const [isLoadingNotes, setIsLoadingNotes] = useState(false);
+  const [isExportingNotes, setIsExportingNotes] = useState(false);
   const [isSearchingAI, setIsSearchingAI] = useState(false);
   const [isCreatingNote, setIsCreatingNote] = useState(false);
   const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
@@ -98,6 +99,7 @@ function App() {
 
   // --- Refs ---
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const exportRequestRef = useRef<AbortController | null>(null);
   const notificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -186,6 +188,9 @@ function App() {
   };
 
   const handleLogout = () => {
+    exportRequestRef.current?.abort();
+    exportRequestRef.current = null;
+    setIsExportingNotes(false);
     localStorage.removeItem("token");
     setToken(null);
     setUser(null);
@@ -196,6 +201,52 @@ function App() {
     setIsSearching(false);
     setQuery("");
     setCollections([]);
+  };
+
+  const exportNotes = async () => {
+    if (!token || exportRequestRef.current) return;
+
+    const request = new AbortController();
+    exportRequestRef.current = request;
+    setIsExportingNotes(true);
+    try {
+      const allNotes = await apiRequest<Note[]>("/notes", {
+        signal: request.signal,
+      });
+      if (request.signal.aborted) return;
+      if (!Array.isArray(allNotes))
+        throw new Error("Unexpected notes response");
+      if (allNotes.length === 0) {
+        showNotification("No notes to export.", "info");
+        return;
+      }
+
+      const markdown = allNotes
+        .map(({ title, content }) => {
+          const heading = title.replace(/\s+/g, " ").trim();
+          return `# ${heading}\n\n${content}`;
+        })
+        .join("\n\n---\n\n");
+      const url = URL.createObjectURL(
+        new Blob([markdown, "\n"], { type: "text/markdown;charset=utf-8" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "devmind-notes.md";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      if (!request.signal.aborted) {
+        showNotification("Failed to export notes.", "error");
+      }
+    } finally {
+      if (exportRequestRef.current === request) {
+        exportRequestRef.current = null;
+        setIsExportingNotes(false);
+      }
+    }
   };
 
   // --- Data fetching ---
@@ -519,6 +570,8 @@ function App() {
       />
 
       <TopBar
+        onExportNotes={exportNotes}
+        isExportingNotes={isExportingNotes}
         notesCount={notes.length}
         userLabel={user?.name || user?.email || "Account"}
         theme={theme}
