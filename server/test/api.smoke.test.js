@@ -32,6 +32,7 @@ const notes = [];
 const collections = [];
 const tags = [];
 const subscriptions = [];
+const usageRecords = [];
 const usageWrites = mock.fn(async () => {});
 let nextId = 1;
 
@@ -187,7 +188,14 @@ mock.module(moduleUrl("src/models/Subscription.ts"), {
   },
 });
 mock.module(moduleUrl("src/models/MonthlyUsage.ts"), {
-  exports: { default: { init: async () => {}, updateOne: usageWrites } },
+  exports: {
+    default: {
+      init: async () => {},
+      updateOne: usageWrites,
+      findOne: (filter) =>
+        query(usageRecords.find((record) => matches(record, filter)) ?? null),
+    },
+  },
 });
 mock.module(moduleUrl("src/models/SearchLog.ts"), {
   exports: {
@@ -227,6 +235,7 @@ beforeEach(() => {
   collections.length = 0;
   tags.length = 0;
   subscriptions.length = 0;
+  usageRecords.length = 0;
   usageWrites.mock.resetCalls();
   usageWrites.mock.restore();
   nextId = 1;
@@ -263,7 +272,10 @@ test("subscription access is scoped to the account and requires an active Pro pe
   const getSubscription = (auth) =>
     request(app).get("/api/subscription").set("Authorization", auth);
 
-  await getSubscription(owner).expect(200, {
+  const { usage: _ownerUsage, ...ownerSubscription } = (
+    await getSubscription(owner).expect(200)
+  ).body;
+  assert.deepEqual(ownerSubscription, {
     plan: "pro",
     status: "active",
     currentPeriodEnd: periodEnd.toISOString(),
@@ -274,15 +286,17 @@ test("subscription access is scoped to the account and requires an active Pro pe
     bulkMarkdownImport: false,
     expandedRelatedNotes: false,
   };
-  await getSubscription(other)
+  const otherResponse = await getSubscription(other)
     .query({ accountId: subscription.accountId, plan: "pro" })
-    .expect(200, {
-      plan: "free",
-      status: null,
-      currentPeriodEnd: null,
-      cancelAtPeriodEnd: false,
-      entitlements: freeEntitlements,
-    });
+    .expect(200);
+  const { usage: _otherUsage, ...otherSubscription } = otherResponse.body;
+  assert.deepEqual(otherSubscription, {
+    plan: "free",
+    status: null,
+    currentPeriodEnd: null,
+    cancelAtPeriodEnd: false,
+    entitlements: freeEntitlements,
+  });
 
   subscription.status = "past_due";
   const pastDue = await getSubscription(owner).expect(200);
@@ -293,6 +307,64 @@ test("subscription access is scoped to the account and requires an active Pro pe
   subscription.currentPeriodEnd = new Date(0);
   const expired = await getSubscription(owner).expect(200);
   assert.equal(expired.body.plan, "free");
+});
+
+test("returns account-scoped usage and resets at the UTC month boundary", async (t) => {
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: new Date("2026-12-31T23:59:59.999Z"),
+  });
+  const owner = await register("usage-owner@example.com");
+  const other = await register("usage-other@example.com");
+  const accountId = accounts[0]._id;
+  usageRecords.push(
+    {
+      accountId,
+      monthStart: new Date("2026-11-01T00:00:00.000Z"),
+      semanticSearchRequests: 81,
+      noteEmbeddingRequests: 24,
+    },
+    {
+      accountId,
+      monthStart: new Date("2026-12-01T00:00:00.000Z"),
+      semanticSearchRequests: 3,
+      noteEmbeddingRequests: 7,
+    },
+  );
+
+  const path = "/api/subscription";
+  const current = await request(app)
+    .get(path)
+    .set("Authorization", owner)
+    .expect("Cache-Control", "no-store")
+    .expect(200);
+  assert.deepEqual(current.body.usage, {
+    semanticSearchRequests: 3,
+    noteEmbeddingRequests: 7,
+    resetAt: "2027-01-01T00:00:00.000Z",
+  });
+
+  const isolated = await request(app)
+    .get(path)
+    .query({ accountId })
+    .set("Authorization", other)
+    .expect(200);
+  assert.deepEqual(isolated.body.usage, {
+    semanticSearchRequests: 0,
+    noteEmbeddingRequests: 0,
+    resetAt: "2027-01-01T00:00:00.000Z",
+  });
+
+  t.mock.timers.setTime(Date.parse("2027-01-01T00:00:00.000Z"));
+  const reset = await request(app)
+    .get(path)
+    .set("Authorization", owner)
+    .expect(200);
+  assert.deepEqual(reset.body.usage, {
+    semanticSearchRequests: 0,
+    noteEmbeddingRequests: 0,
+    resetAt: "2027-02-01T00:00:00.000Z",
+  });
 });
 
 test("rejects duplicate registration and incorrect login credentials", async () => {
