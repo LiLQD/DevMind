@@ -4,6 +4,15 @@ import type { Collection } from "../types";
 
 type CollectionOption = Partial<Collection> & { id?: string };
 
+const fixTemplate = [
+  "## Problem or symptom",
+  "## Error message",
+  "## Root cause",
+  "## Solution",
+  "## Code snippets",
+  "## Source URL (optional)",
+].join("\n\n\n");
+
 type CreatePanelProps = {
   isEditing: boolean;
   title: string;
@@ -45,6 +54,17 @@ export default function CreatePanel({
 }: CreatePanelProps) {
   const [isCreatingCollection, setIsCreatingCollection] = useState(false);
   const collectionInputRef = useRef<HTMLInputElement>(null);
+  const contentInputRef = useRef<HTMLTextAreaElement>(null);
+
+  const applyFixTemplate = () => {
+    setContent(fixTemplate);
+    window.requestAnimationFrame(() => {
+      const input = contentInputRef.current;
+      const firstSection = fixTemplate.indexOf("\n") + 1;
+      input?.focus();
+      input?.setSelectionRange(firstSection, firstSection);
+    });
+  };
 
   const getCollectionId = (collection: CollectionOption) =>
     String(collection?._id ?? collection?.id ?? "");
@@ -210,10 +230,22 @@ export default function CreatePanel({
           )}
         </div>
 
+        {!isEditing && !content.trim() && (
+          <button
+            type="button"
+            className="text-btn"
+            onClick={applyFixTemplate}
+            disabled={isSaving}
+          >
+            Use Save a fix template
+          </button>
+        )}
+
         {/* Content */}
         <label className="form-field form-field-content">
           <span>Content</span>
           <textarea
+            ref={contentInputRef}
             placeholder="Write the idea, fix, snippet, or reference you want to remember…"
             value={content}
             onChange={(e) => setContent(e.target.value)}
