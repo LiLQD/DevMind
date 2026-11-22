@@ -1,7 +1,9 @@
 import type { RequestHandler } from "express";
 import Note from "../models/Note.ts";
 import SearchLog from "../models/SearchLog.ts";
-import { recordUsage } from "../services/usage.service.ts";
+import { monthlySemanticSearchAllowances } from "../config/plans.ts";
+import { getAccountSubscription } from "../services/subscription.service.ts";
+import { reserveSemanticSearch } from "../services/usage.service.ts";
 import {
   generateQueryEmbedding,
   cosineSimilarity,
@@ -48,16 +50,35 @@ const semanticSearch: RequestHandler = async (req, res) => {
       throw new TypeError("Search query must be a string.");
     }
 
-    // 1. Count notes (reported back in the response)
+    const accountId = req.user!.id;
     const noteCount = await Note.countDocuments({
-      userId: req.user!.id,
+      userId: accountId,
       embeddingStatus: "success",
     });
+
+    try {
+      const { plan } = await getAccountSubscription(accountId);
+      const { allowed, resetAt } = await reserveSemanticSearch(
+        accountId,
+        monthlySemanticSearchAllowances[plan],
+      );
+      if (!allowed) {
+        return res.status(429).json({
+          code: "SEMANTIC_SEARCH_QUOTA_EXCEEDED",
+          message: "Bạn đã dùng hết lượt tìm kiếm ngữ nghĩa trong tháng.",
+          resetAt: resetAt.toISOString(),
+        });
+      }
+    } catch {
+      console.error("Could not verify the semantic search quota.");
+      return res
+        .status(503)
+        .json({ message: "Tìm kiếm tạm thời không khả dụng" });
+    }
 
     // 2. Generate query embedding
     let queryEmbedding;
     try {
-      await recordUsage(req.user!.id, "semanticSearchRequests");
       queryEmbedding = await generateQueryEmbedding(query);
       if (!queryEmbedding) {
         return res
