@@ -33,7 +33,40 @@ const collections = [];
 const tags = [];
 const subscriptions = [];
 const usageRecords = [];
-const usageWrites = mock.fn(async () => {});
+const findSubscription = mock.fn((filter) =>
+  query(subscriptions.find((record) => matches(record, filter)) ?? null),
+);
+const usageWrites = mock.fn(async (filter, { $inc }, options) => {
+  const { $or, ...identity } = filter;
+  let record = usageRecords.find((entry) => matches(entry, identity));
+  if (
+    record &&
+    $or &&
+    !$or.some(({ semanticSearchRequests: condition }) =>
+      condition.$exists === false
+        ? !Object.hasOwn(record, "semanticSearchRequests")
+        : record.semanticSearchRequests < condition.$lt,
+    )
+  ) {
+    if (options?.upsert)
+      throw Object.assign(new Error("Duplicate month"), { code: 11000 });
+    return { matchedCount: 0, upsertedCount: 0 };
+  }
+  const matchedCount = record ? 1 : 0;
+  if (!record && !options?.upsert) return { matchedCount, upsertedCount: 0 };
+  if (!record) {
+    record = {
+      ...identity,
+      semanticSearchRequests: 0,
+      noteEmbeddingRequests: 0,
+    };
+    usageRecords.push(record);
+  }
+  for (const [counter, amount] of Object.entries($inc)) {
+    record[counter] = (record[counter] ?? 0) + amount;
+  }
+  return { matchedCount, upsertedCount: 1 - matchedCount };
+});
 let nextId = 1;
 
 const matches = (document, filter) =>
@@ -182,8 +215,7 @@ mock.module(moduleUrl("src/models/Tag.ts"), { exports: { default: Tag } });
 mock.module(moduleUrl("src/models/Subscription.ts"), {
   exports: {
     default: {
-      findOne: (filter) =>
-        query(subscriptions.find((record) => matches(record, filter)) ?? null),
+      findOne: findSubscription,
     },
   },
 });
@@ -236,6 +268,8 @@ beforeEach(() => {
   tags.length = 0;
   subscriptions.length = 0;
   usageRecords.length = 0;
+  findSubscription.mock.resetCalls();
+  findSubscription.mock.restore();
   usageWrites.mock.resetCalls();
   usageWrites.mock.restore();
   nextId = 1;
@@ -602,9 +636,27 @@ test("meters only requests that attempt semantic search or note embedding", asyn
     [
       [filter, { $inc: { noteEmbeddingRequests: 1 } }, { upsert: true }],
       [filter, { $inc: { noteEmbeddingRequests: 1 } }, { upsert: true }],
-      [filter, { $inc: { semanticSearchRequests: 1 } }, { upsert: true }],
+      [
+        {
+          ...filter,
+          $or: [
+            { semanticSearchRequests: { $lt: 100 } },
+            { semanticSearchRequests: { $exists: false } },
+          ],
+        },
+        { $inc: { semanticSearchRequests: 1 } },
+        { upsert: true },
+      ],
     ],
   );
+  assert.deepEqual(usageRecords, [
+    {
+      ...filter,
+      semanticSearchRequests: 1,
+      noteEmbeddingRequests: 2,
+    },
+  ]);
+  assert.equal(generateQueryEmbedding.mock.callCount(), 1);
 });
 
 test("retries duplicate-key usage writes and preserves note saves when metering fails", async () => {
@@ -781,4 +833,85 @@ test("reports dependency readiness separately from liveness", async () => {
 
   assert.equal(response.body.status, "NOT_READY");
   assert.deepEqual(response.body.checks, { database: false, redis: true });
+});
+
+for (const [plan, allowance] of [
+  ["free", 100],
+  ["pro", 1000],
+]) {
+  test(`enforces the ${plan} monthly boundary and resets at midnight UTC`, async (t) => {
+    t.mock.timers.enable({
+      apis: ["Date"],
+      now: new Date("2026-12-31T23:59:59.999Z"),
+    });
+    const auth = await register("quota@example.com");
+    const accountId = accounts[0]._id;
+    if (plan === "pro") {
+      subscriptions.push({
+        accountId,
+        plan,
+        status: "active",
+        currentPeriodEnd: new Date("2027-02-01T00:00:00.000Z"),
+      });
+    }
+    await createNote(auth);
+    const previousMonth = usageRecords[0];
+    previousMonth.semanticSearchRequests = allowance - 1;
+
+    const search = (mode) =>
+      request(app)
+        .post("/api/notes/search")
+        .set("Authorization", auth)
+        .send({ mode, query: "Original" });
+
+    await search("semantic").expect(200);
+    const rejected = await search("semantic").expect(429);
+    assert.equal(rejected.body.code, "SEMANTIC_SEARCH_QUOTA_EXCEEDED");
+    assert.ok(rejected.body.message);
+    assert.equal(rejected.body.resetAt, "2027-01-01T00:00:00.000Z");
+    const reads = findSubscription.mock.callCount();
+    const writes = usageWrites.mock.callCount();
+    await search("exact").expect(200);
+    assert.equal(findSubscription.mock.callCount(), reads);
+    assert.equal(usageWrites.mock.callCount(), writes);
+    assert.equal(generateQueryEmbedding.mock.callCount(), 1);
+    assert.equal(previousMonth.semanticSearchRequests, allowance);
+    assert.equal(previousMonth.noteEmbeddingRequests, 1);
+
+    t.mock.timers.setTime(Date.parse("2027-01-01T00:00:00.000Z"));
+    await search("semantic").expect(200);
+    assert.equal(usageRecords[1].semanticSearchRequests, 1);
+    assert.equal(usageRecords[1].noteEmbeddingRequests, 0);
+    assert.equal(previousMonth.semanticSearchRequests, allowance);
+  });
+}
+
+test("returns search unavailable when plan lookup or quota storage fails", async (t) => {
+  const auth = await register("quota-failure@example.com");
+  const log = t.mock.method(console, "error", () => {});
+  const databaseError = new Error("private database detail");
+  const fail = () => {
+    throw databaseError;
+  };
+  const search = () =>
+    request(app)
+      .post("/api/notes/search")
+      .set("Authorization", auth)
+      .send({ query: "Original" })
+      .expect(503, { message: "Tìm kiếm tạm thời không khả dụng" });
+
+  findSubscription.mock.mockImplementationOnce(fail);
+  await search();
+  assert.equal(usageWrites.mock.callCount(), 0);
+
+  usageWrites.mock.mockImplementationOnce(fail);
+  await search();
+  assert.equal(generateQueryEmbedding.mock.callCount(), 0);
+  assert.equal(usageRecords.length, 0);
+  assert.equal(log.mock.callCount(), 2);
+  assert.ok(
+    !JSON.stringify(log.mock.calls.map(({ arguments: args }) => args)).includes(
+      databaseError.message,
+    ),
+  );
 });

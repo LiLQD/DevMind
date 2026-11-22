@@ -10,3 +10,8 @@ export const plans = {
 } as const;
 
 export type Plan = keyof typeof plans;
+
+export const monthlySemanticSearchAllowances: Record<Plan, number> = {
+  free: 100,
+  pro: 1000,
+};
