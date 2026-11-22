@@ -7,7 +7,10 @@ type NoteViewProps = {
   isLoadingNote: boolean;
   isLoadingRelated: boolean;
   onViewNote: (id: string) => void;
-  onDeleteNote: () => void;
+  onCreateNote: () => void;
+  hasNotes: boolean;
+  onEditNote: (note: Note) => void;
+  onDeleteNote: (note: Note) => void;
   deletingNoteId: string | null;
 };
 
@@ -27,6 +30,9 @@ export default function NoteView({
   isLoadingNote,
   isLoadingRelated,
   onViewNote,
+  onCreateNote,
+  hasNotes,
+  onEditNote,
   onDeleteNote,
   deletingNoteId,
 }: NoteViewProps) {
@@ -44,13 +50,22 @@ export default function NoteView({
   if (!selectedNote) {
     return (
       <div className="main-empty">
-        <div className="main-empty-title">Select a note</div>
-        <p>Choose a note from the sidebar, or create a new one on the right.</p>
+        <h1 className="main-empty-title">
+          {hasNotes ? "Choose a note" : "Save your first fix"}
+        </h1>
+        <p>
+          {hasNotes
+            ? "Open a note from the list, or search for a symptom or an exact error."
+            : "Capture an error, what caused it, and the solution you want to find again."}
+        </p>
+        <button type="button" className="primary-btn" onClick={onCreateNote}>
+          New note
+        </button>
       </div>
     );
   }
 
-  const collectionName = selectedNote.collection
+  const legacyCollectionName = selectedNote.collection
     ? typeof selectedNote.collection === "object"
       ? selectedNote.collection.name
       : selectedNote.collection
@@ -61,46 +76,53 @@ export default function NoteView({
       {/* Header with title + metadata */}
       <div className="note-header">
         <div>
-          <div className="eyebrow">Note</div>
           <h1 className="note-title" id="note-view-title">
             {selectedNote.title}
           </h1>
           <div className="note-meta-line">
-            {collectionName && (
+            <time className="note-date" dateTime={selectedNote.createdAt}>
+              {formatDate(selectedNote.createdAt)}
+            </time>
+            {selectedNote.collections?.map((collection) => (
+              <span className="note-chip collection-chip" key={collection._id}>
+                {collection.name}
+              </span>
+            ))}
+            {!selectedNote.collections?.length && legacyCollectionName && (
               <span className="note-chip collection-chip">
-                {collectionName}
+                {legacyCollectionName}
               </span>
             )}
-            <span className="note-date">
-              {formatDate(selectedNote.createdAt)}
-            </span>
+            {selectedNote.tags?.map((tag) => (
+              <span key={tag._id} className="note-chip">
+                {tag.name}
+              </span>
+            ))}
           </div>
         </div>
-        <button
-          type="button"
-          className="danger-btn"
-          onClick={onDeleteNote}
-          disabled={deletingNoteId === selectedNote._id}
-        >
-          {deletingNoteId === selectedNote._id ? "Deleting…" : "Delete"}
-        </button>
+        <div className="note-header-actions">
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={() => onEditNote(selectedNote)}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            className="danger-btn"
+            onClick={() => onDeleteNote(selectedNote)}
+            disabled={deletingNoteId === selectedNote._id}
+          >
+            {deletingNoteId === selectedNote._id ? "Deleting…" : "Delete"}
+          </button>
+        </div>
       </div>
 
       {/* Note content */}
       <article className="note-content">
         <NoteMarkdown content={selectedNote.content} />
       </article>
-
-      {/* Tags display */}
-      {selectedNote.tags && selectedNote.tags.length > 0 && (
-        <div className="note-tags-row">
-          {selectedNote.tags.map((tag) => (
-            <span key={tag._id} className="note-chip">
-              {tag.name}
-            </span>
-          ))}
-        </div>
-      )}
 
       {/* Embedding status – text-only, no background */}
       <div className="embedding-status">

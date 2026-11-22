@@ -1,8 +1,15 @@
+import type { ReactNode, Ref } from "react";
 import type { Collection } from "../types";
+import type { SearchMode } from "../types";
 import type { NoteListProps } from "./NoteList";
 
 type SidebarProps = Omit<NoteListProps, "emptyMessage" | "emptyHint"> & {
   isSearching: boolean;
+  searchMode: SearchMode;
+  search: ReactNode;
+  newNoteButtonRef: Ref<HTMLButtonElement>;
+  onNewNote: () => void;
+  onResumeDraft?: () => void;
   selectedCollectionFilter: string | null;
   setSelectedCollectionFilter: (id: string | null) => void;
   collections?: Collection[];
@@ -16,6 +23,12 @@ export default function Sidebar({
   selectedNoteId,
   isLoading,
   isSearching,
+  searchMode,
+  search,
+  newNoteButtonRef,
+  noteListRef,
+  onNewNote,
+  onResumeDraft,
   onViewNote,
   onEditNote,
   onDeleteNote,
@@ -24,9 +37,36 @@ export default function Sidebar({
   collections = [],
 }: SidebarProps) {
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" aria-label="Browse notes">
+      <div className="browse-header">
+        <div className="browse-heading">
+          <h1>Notes</h1>
+          <button
+            ref={newNoteButtonRef}
+            type="button"
+            className="primary-btn"
+            onClick={onNewNote}
+          >
+            New note
+          </button>
+        </div>
+        {onResumeDraft && (
+          <button
+            type="button"
+            className="secondary-btn resume-draft"
+            onClick={onResumeDraft}
+          >
+            Resume draft
+          </button>
+        )}
+        {search}
+      </div>
       <div className="notes-toolbar">
-        <span>{isSearching ? `${notes.length} matches` : "Your notes"}</span>
+        <span aria-live="polite">
+          {isSearching
+            ? `${notes.length} ${notes.length === 1 ? "match" : "matches"}`
+            : "Your notes"}
+        </span>
 
         <div className="sidebar-filters">
           {!isSearching && collections.length > 0 && (
@@ -52,6 +92,7 @@ export default function Sidebar({
 
       <NoteList
         notes={notes}
+        noteListRef={noteListRef}
         exactSearchQuery={exactSearchQuery}
         selectedNoteId={selectedNoteId}
         isLoading={isLoading}
@@ -63,7 +104,9 @@ export default function Sidebar({
         }
         emptyHint={
           isSearching
-            ? "Try describing the idea instead of remembering exact keywords."
+            ? searchMode === "exact"
+              ? "Try a shorter phrase, or switch to By meaning."
+              : "Try describing the problem in different words."
             : "Create your first note to start building your knowledge base."
         }
       />

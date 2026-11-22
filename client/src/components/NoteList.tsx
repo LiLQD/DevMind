@@ -2,6 +2,7 @@ import type { Note } from "../types";
 
 export type NoteListProps = {
   notes: Note[];
+  noteListRef: Ref<HTMLDivElement>;
   exactSearchQuery: string;
   selectedNoteId?: string;
   isLoading: boolean;
@@ -16,6 +17,7 @@ import NoteItem from "./NoteItem";
 
 export default function NoteList({
   notes,
+  noteListRef,
   exactSearchQuery,
   selectedNoteId,
   isLoading,
@@ -27,7 +29,7 @@ export default function NoteList({
 }: NoteListProps) {
   if (isLoading) {
     return (
-      <div className="notes-list">
+      <div className="notes-list" ref={noteListRef} aria-busy="true">
         {Array.from({ length: 7 }).map((_, i) => (
           <div className="note-skeleton" key={i}>
             <div className="skeleton-block skeleton-title-sm" />
@@ -40,7 +42,7 @@ export default function NoteList({
 
   if (notes.length === 0) {
     return (
-      <div className="notes-list">
+      <div className="notes-list" ref={noteListRef}>
         <div className="empty-notes">
           <p>{emptyMessage}</p>
           <span>{emptyHint}</span>
@@ -50,7 +52,7 @@ export default function NoteList({
   }
 
   return (
-    <div className="notes-list">
+    <div className="notes-list" ref={noteListRef}>
       {notes.map((note) => (
         <NoteItem
           key={note._id}
@@ -65,3 +67,4 @@ export default function NoteList({
     </div>
   );
 }
+import type { Ref } from "react";
