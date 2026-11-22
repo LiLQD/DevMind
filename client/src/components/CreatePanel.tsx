@@ -119,24 +119,9 @@ export default function CreatePanel({
   );
 
   return (
-    <aside className="create-panel">
+    <section className="create-panel" aria-labelledby="editor-title">
       <div className="create-header">
-        <div>
-          <div className="eyebrow">
-            {isEditing ? "Edit note" : "Quick capture"}
-          </div>
-          <h2>{isEditing ? "Edit note" : "New note"}</h2>
-        </div>
-        {isEditing && (
-          <button
-            type="button"
-            className="text-btn"
-            onClick={onCancel}
-            disabled={isSaving}
-          >
-            Cancel
-          </button>
-        )}
+        <h1 id="editor-title">{isEditing ? "Edit note" : "New note"}</h1>
       </div>
 
       <form
@@ -177,8 +162,11 @@ export default function CreatePanel({
 
         {/* Collection */}
         <div className="form-field">
-          <span>Collection</span>
+          <label className="form-label" htmlFor="note-collection">
+            Collection
+          </label>
           <select
+            id="note-collection"
             value={
               isCreatingCollection
                 ? "__create_collection__"
@@ -305,15 +293,25 @@ export default function CreatePanel({
           <span className="create-hint">
             <kbd>⌘ Enter</kbd> to save · <kbd>Esc</kbd> to cancel
           </span>
-          <button
-            type="submit"
-            className="primary-btn save-btn"
-            disabled={isSaving || isCreatingCollection}
-          >
-            {isSaving ? "Saving…" : submitLabel}
-          </button>
+          <div className="create-footer-actions">
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={onCancel}
+              disabled={isSaving}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="primary-btn save-btn"
+              disabled={isSaving || isCreatingCollection}
+            >
+              {isSaving ? "Saving…" : submitLabel}
+            </button>
+          </div>
         </div>
       </form>
-    </aside>
+    </section>
   );
 }

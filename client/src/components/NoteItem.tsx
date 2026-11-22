@@ -1,3 +1,4 @@
+import { useId } from "react";
 import type { Note } from "../types";
 
 type NoteItemProps = {
@@ -42,12 +43,18 @@ export default function NoteItem({
   onEdit,
   onDelete,
 }: NoteItemProps) {
+  const metadataId = useId();
   const pattern = exactSearchQuery
     ? new RegExp(exactSearchQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
     : null;
   const titleMatch = pattern?.exec(note.title);
   const bodyMatch = pattern?.exec(note.content);
-  const collections = exactSearchQuery ? note.collections : undefined;
+  const collections = note.collections;
+
+  const preview = note.content
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line && !/^(?:#{1,6}\s|```|~~~)/.test(line));
 
   let excerpt;
   if (bodyMatch) {
@@ -59,84 +66,77 @@ export default function NoteItem({
     const end = Math.min(lineEnd, matchEnd + 60);
 
     excerpt = (
-      <p className="note-match-excerpt">
+      <span className="note-match-excerpt">
         {start > lineStart ? "…" : ""}
         {highlightMatch(note.content, bodyMatch, start, end)}
         {end < lineEnd ? "…" : ""}
-      </p>
+      </span>
     );
   }
 
   return (
-    <div
-      className={`note-item ${isActive ? "active" : ""}`}
-      onClick={onView}
-      role="button"
-      tabIndex={0}
-    >
-      <div className="note-item-top">
-        <h3 className={titleMatch ? "note-match-title" : undefined}>
-          {titleMatch ? highlightMatch(note.title, titleMatch) : note.title}
-        </h3>
-        <div className="note-item-actions">
-          <span
-            className={`status-dot ${note.embeddingStatus === "failed" ? "failed" : ""}`}
-            title={
-              note.embeddingStatus === "failed"
-                ? "Saved without embedding"
-                : "Ready for semantic search"
-            }
-          />
-          <button
-            type="button"
-            className="row-action edit-action"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            className="row-action delete-action"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-
-      {excerpt}
-
-      <div
-        className={
-          exactSearchQuery
-            ? "note-item-bottom note-match-meta"
-            : "note-item-bottom"
-        }
+    <div className={`note-item ${isActive ? "active" : ""}`}>
+      <button
+        className="note-open"
+        type="button"
+        aria-current={isActive ? "true" : undefined}
+        aria-label={note.title}
+        aria-describedby={metadataId}
+        onClick={onView}
       >
-        <span className="note-date">{formatDate(note.createdAt)}</span>
-        {collections?.map((collection) => (
-          <span key={collection._id} className="note-chip collection-chip">
-            {collection.name}
-          </span>
-        ))}
-        {!collections?.length && note.collection && (
-          <span className="note-chip collection-chip">
-            {typeof note.collection === "object"
-              ? note.collection.name
-              : note.collection}
-          </span>
-        )}
-        {note.similarityScore != null && (
-          <span className="score-chip">
-            {Math.round(note.similarityScore * 100)}%
-          </span>
-        )}
+        <span
+          className={
+            titleMatch ? "note-row-title note-match-title" : "note-row-title"
+          }
+        >
+          {titleMatch ? highlightMatch(note.title, titleMatch) : note.title}
+        </span>
+        {excerpt ??
+          (preview && (
+            <span className="note-row-excerpt">{preview.slice(0, 160)}</span>
+          ))}
+        <span className="note-item-bottom" id={metadataId}>
+          <time dateTime={note.createdAt}>{formatDate(note.createdAt)}</time>
+          {collections?.map((collection) => (
+            <span key={collection._id} className="note-row-label">
+              {collection.name}
+            </span>
+          ))}
+          {!collections?.length && note.collection && (
+            <span className="note-row-label">
+              {typeof note.collection === "object"
+                ? note.collection.name
+                : note.collection}
+            </span>
+          )}
+          {note.tags?.map((tag) => (
+            <span key={tag._id} className="note-row-label">
+              {tag.name}
+            </span>
+          ))}
+          {note.embeddingStatus === "failed" && (
+            <span>Saved without embedding</span>
+          )}
+          {note.similarityScore != null && (
+            <span>{Math.round(note.similarityScore * 100)}%</span>
+          )}
+        </span>
+      </button>
+      <div className="note-item-actions">
+        <button
+          type="button"
+          className="row-action edit-action"
+          onClick={onEdit}
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          className="row-action delete-action"
+          onClick={onDelete}
+        >
+          Delete
+        </button>
       </div>
     </div>
   );

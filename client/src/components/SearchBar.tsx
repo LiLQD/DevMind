@@ -24,27 +24,24 @@ export default function SearchBar({
 }: SearchBarProps) {
   return (
     <div className="search-bar-container">
-      <form onSubmit={onSearch} className="search-bar-form">
-        <select
-          className="search-bar-mode"
-          aria-label="Search mode"
-          value={mode}
-          onChange={(event) =>
-            setMode(event.target.value === "exact" ? "exact" : "semantic")
-          }
-          disabled={isSearchingAI}
-        >
-          <option value="semantic">By meaning</option>
-          <option value="exact">Exact text</option>
-        </select>
+      <form
+        onSubmit={onSearch}
+        className="search-bar-form"
+        role="search"
+        aria-label="Search notes"
+      >
+        <label className="search-label" htmlFor="notes-search">
+          Search notes
+        </label>
         <div className="search-bar-input-wrap">
           <input
+            id="notes-search"
             ref={searchInputRef}
             type="text"
             placeholder={
               mode === "exact"
-                ? "Paste an error message or enter exact text…"
-                : "Search by meaning… describe the problem, idea, or solution you remember."
+                ? "Paste an error or phrase"
+                : "Describe the problem or fix"
             }
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -63,6 +60,18 @@ export default function SearchBar({
             </button>
           )}
         </div>
+        <select
+          className="search-bar-mode"
+          aria-label="Search mode"
+          value={mode}
+          onChange={(event) =>
+            setMode(event.target.value === "exact" ? "exact" : "semantic")
+          }
+          disabled={isSearchingAI}
+        >
+          <option value="semantic">By meaning</option>
+          <option value="exact">Exact text</option>
+        </select>
         <button
           type="submit"
           className="search-bar-submit"
@@ -72,18 +81,9 @@ export default function SearchBar({
         </button>
       </form>
       <div className="search-bar-meta">
-        <span>
-          {mode === "exact"
-            ? "Literal phrase match"
-            : "Natural-language search"}{" "}
-          · up to 1,000 characters
-        </span>
         <div className="search-bar-shortcuts">
           <span>
             <kbd>⌘/Ctrl K</kbd> focus
-          </span>
-          <span>
-            <kbd>Enter</kbd> search
           </span>
         </div>
       </div>
