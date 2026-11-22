@@ -1,3 +1,17 @@
+import type { Dispatch, FormEventHandler, SetStateAction } from "react";
+
+type AuthPageProps = {
+  isLogin: boolean;
+  setIsLogin: Dispatch<SetStateAction<boolean>>;
+  email: string;
+  setEmail: (email: string) => void;
+  password: string;
+  setPassword: (password: string) => void;
+  name: string;
+  setName: (name: string) => void;
+  onSubmit: FormEventHandler<HTMLFormElement>;
+};
+
 export default function AuthPage({
   isLogin,
   setIsLogin,
@@ -8,7 +22,7 @@ export default function AuthPage({
   name,
   setName,
   onSubmit,
-}) {
+}: AuthPageProps) {
   return (
     <div className="auth-page">
       <div className="auth-box">

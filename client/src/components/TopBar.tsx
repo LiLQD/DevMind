@@ -1,10 +1,18 @@
+type TopBarProps = {
+  notesCount: number;
+  userLabel: string;
+  theme: string;
+  onToggleTheme: () => void;
+  onLogout: () => void;
+};
+
 export default function TopBar({
   notesCount,
   userLabel,
   theme,
   onToggleTheme,
   onLogout,
-}) {
+}: TopBarProps) {
   return (
     <header className="topbar">
       <div className="topbar-left">
