@@ -6,7 +6,36 @@ import {
   cosineSimilarity,
 } from "../services/embedding.service.ts";
 
-export const semanticSearch: RequestHandler = async (req, res) => {
+const exactSearch: RequestHandler = async (req, res) => {
+  const query: unknown = req.body.query;
+  if (typeof query !== "string" || !query.trim() || query.length > 1000) {
+    res
+      .status(400)
+      .json({ message: "Enter a search query of 1–1,000 characters." });
+    return;
+  }
+
+  const escaped = query.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(escaped, "i");
+  const results = await Note.find({
+    userId: req.user!.id,
+    $or: [{ title: match }, { content: match }],
+  })
+    .select("-embedding")
+    .populate(["tags", "collections"])
+    .sort({ updatedAt: -1, _id: -1 });
+  res.json({ results });
+};
+
+export const searchNotes: RequestHandler = async (req, res, next) => {
+  const mode: unknown = req.body?.mode;
+  if (mode === "exact") return exactSearch(req, res, next);
+  if (mode === undefined || mode === "semantic")
+    return semanticSearch(req, res, next);
+  res.status(400).json({ message: "Unknown search mode." });
+};
+
+const semanticSearch: RequestHandler = async (req, res) => {
   try {
     const { query }: { query?: unknown } = req.body;
     const TOP_K = 5;

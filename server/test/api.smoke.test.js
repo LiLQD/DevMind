@@ -34,6 +34,8 @@ let nextId = 1;
 
 const matches = (document, filter) =>
   Object.entries(filter).every(([key, value]) => {
+    if (key === "$or") return value.some((clause) => matches(document, clause));
+    if (value instanceof RegExp) return value.test(document[key]);
     if (Array.isArray(document[key])) return document[key].includes(value);
     return String(document[key]) === String(value);
   });
@@ -192,12 +194,13 @@ mock.module(moduleUrl("src/config/redis.ts"), {
 mock.module("rate-limit-redis", { exports: { default: RedisStore } });
 const defaultEmbedding = async () => [1, 0];
 const generateEmbedding = mock.fn(defaultEmbedding);
+const generateQueryEmbedding = mock.fn(defaultEmbedding);
 const { cosineSimilarity } =
   await import("../src/services/embedding.service.ts");
 mock.module(moduleUrl("src/services/embedding.service.ts"), {
   exports: {
     generateEmbedding,
-    generateQueryEmbedding: async () => [1, 0],
+    generateQueryEmbedding,
     cosineSimilarity,
   },
 });
@@ -212,6 +215,7 @@ beforeEach(() => {
   nextId = 1;
   generateEmbedding.mock.resetCalls();
   generateEmbedding.mock.mockImplementation(defaultEmbedding);
+  generateQueryEmbedding.mock.resetCalls();
 });
 
 async function register(email) {
@@ -428,6 +432,32 @@ test("saves a failed content update and excludes its retained vector from search
     [control._id],
   );
   assert.equal(search.body.noteCount, 1);
+});
+
+test("exact search matches literal punctuation across the owner's notes without embeddings", async () => {
+  const owner = await register("exact-owner@example.com");
+  const other = await register("exact-other@example.com");
+  const error = "TypeError: x[0].call()";
+  generateEmbedding.mock.mockImplementation(async () => null);
+  const matching = await createNote(owner, error);
+  assert.equal(matching.embeddingStatus, "failed");
+  await createNote(owner, "TypeError: x0Xcall");
+  await createNote(other, error);
+
+  const search = (phrase) =>
+    request(app)
+      .post("/api/notes/search")
+      .set("Authorization", owner)
+      .send({ query: phrase, mode: "exact" });
+
+  const response = await search(error.toLowerCase()).expect(200);
+  assert.deepEqual(
+    response.body.results.map(({ _id }) => _id),
+    [matching._id],
+  );
+  await search("unmatched").expect(200, { results: [] });
+  await search("   ").expect(400);
+  assert.equal(generateQueryEmbedding.mock.callCount(), 0);
 });
 
 test("ranks semantic matches with a keyword bonus and excludes results outside the score margin", async () => {
