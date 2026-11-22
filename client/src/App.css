@@ -16,6 +16,10 @@
   --action-fg: #ffffff;
   --action-hover: #1e4694;
   --focus-ring: #2455b2;
+  --syntax-keyword: #2455b2;
+  --syntax-string: #246248;
+  --syntax-literal: #8b451a;
+  --syntax-symbol: #644386;
   --success: #16835b;
   --success-soft: #eaf8f1;
   --warning: #a16207;
@@ -67,6 +71,10 @@
   --action-fg: #101a2a;
   --action-hover: #b1cfff;
   --focus-ring: #91b9ff;
+  --syntax-keyword: #a6c5ff;
+  --syntax-string: #9bd6b3;
+  --syntax-literal: #f2b98c;
+  --syntax-symbol: #d2b6e8;
   --success: #3fcf8e;
   --success-soft: #16382b;
   --warning: #f1b94a;
@@ -797,6 +805,28 @@ button:disabled {
   border: var(--border-width) solid var(--border);
   border-radius: var(--radius-control);
   background: var(--surface-subtle);
+}
+
+.note-content pre .token:is(.comment, .punctuation, .operator) {
+  color: var(--text-muted);
+}
+
+.note-content pre .token:is(.keyword, .atrule, .selector) {
+  color: var(--syntax-keyword);
+}
+
+.note-content pre .token:is(.string, .char) {
+  color: var(--syntax-string);
+}
+
+.note-content pre .token:is(.number, .boolean, .null, .constant) {
+  color: var(--syntax-literal);
+}
+
+.note-content
+  pre
+  .token:is(.class-name, .function, .builtin, .property, .key, .variable) {
+  color: var(--syntax-symbol);
 }
 
 .note-content img {
