@@ -1,3 +1,4 @@
+import type { RequestHandler } from "express";
 import Note from "../models/Note.ts";
 import SearchLog from "../models/SearchLog.ts";
 import {
@@ -5,18 +6,21 @@ import {
   cosineSimilarity,
 } from "../services/embedding.service.ts";
 
-export const semanticSearch = async (req, res) => {
+export const semanticSearch: RequestHandler = async (req, res) => {
   try {
-    const { query } = req.body;
+    const { query }: { query?: unknown } = req.body;
     const TOP_K = 5;
 
-    if (!query || query.trim() === "") {
+    if (!query || (typeof query === "string" && query.trim() === "")) {
       return res.status(400).json({ message: "Vui lòng nhập từ khóa" });
+    }
+    if (typeof query !== "string") {
+      throw new TypeError("Search query must be a string.");
     }
 
     // 1. Count notes (reported back in the response)
     const noteCount = await Note.countDocuments({
-      userId: req.user.id,
+      userId: req.user!.id,
       embeddingStatus: "success",
     });
 
@@ -37,7 +41,7 @@ export const semanticSearch = async (req, res) => {
 
     // 3. Fetch all notes
     const notes = await Note.find({
-      userId: req.user.id,
+      userId: req.user!.id,
       embeddingStatus: "success",
     }).populate(["tags", "collections"]);
 
@@ -176,7 +180,7 @@ export const semanticSearch = async (req, res) => {
     // 7. Save search log (store semantic scores for later analysis)
     try {
       const searchLog = new SearchLog({
-        userId: req.user.id,
+        userId: req.user!.id,
         query: query,
         results: finalResults.map((r) => r._id),
         resultCount: finalResults.length,

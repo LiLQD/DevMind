@@ -18,6 +18,7 @@
     "src/controllers/auth.controller.ts",
     "src/controllers/collection.controller.ts",
     "src/controllers/note.controller.ts",
+    "src/controllers/search.controller.ts",
     "src/controllers/tag.controller.ts",
     "src/middleware/auth.middleware.ts",
     "src/middleware/rateLimiter.ts",
@@ -30,6 +31,7 @@
     "src/routes/admin.routes.ts",
     "src/routes/auth.routes.ts",
     "src/routes/collection.routes.ts",
+    "src/routes/notes.routes.ts",
     "src/routes/staff.routes.ts",
     "src/routes/tag.routes.ts",
     "src/services/embedding.service.ts"
