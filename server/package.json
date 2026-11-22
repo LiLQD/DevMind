@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node dist/server.js",
     "test": "node --experimental-test-module-mocks --test",
-    "dev": "node --watch src/server.js",
+    "dev": "node --watch src/server.ts",
     "typecheck": "tsc --project tsconfig.json",
     "build": "tsc --project tsconfig.build.json"
   },
@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.19.43",

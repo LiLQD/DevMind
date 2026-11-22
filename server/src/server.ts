@@ -1,12 +1,13 @@
+import type { Server } from "node:http";
 import { env } from "./config/env.ts";
-import app from "./app.js";
+import app from "./app.ts";
 import mongoose from "mongoose";
 import redis from "./config/redis.ts";
 
-let httpServer;
+let httpServer: Server | undefined;
 let shuttingDown = false;
 
-const shutdown = async (signal) => {
+const shutdown = async (signal: "SIGTERM" | "SIGINT") => {
   if (shuttingDown) return;
   shuttingDown = true;
 
@@ -18,9 +19,10 @@ const shutdown = async (signal) => {
   forceExit.unref();
 
   try {
-    if (httpServer) {
-      await new Promise((resolve, reject) => {
-        httpServer.close((error) => (error ? reject(error) : resolve()));
+    const server = httpServer;
+    if (server) {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
       });
     }
     await mongoose.connection.close();
@@ -44,7 +46,8 @@ mongoose
   .connect(env.MONGODB_URI)
   .then(() => {
     console.log("MongoDB connected");
-    httpServer = app.listen(env.PORT, "0.0.0.0", () => {
+    // Node's listen overload accepts numeric strings at runtime.
+    httpServer = app.listen(env.PORT as number, "0.0.0.0", () => {
       console.log(`Backend chạy tại http://localhost:${env.PORT}`);
     });
   })
