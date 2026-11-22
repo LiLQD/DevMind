@@ -5,8 +5,8 @@ import {
   getNote,
   updateNote,
   deleteNote,
-} from "../controllers/note.controller.js";
-import { semanticSearch } from "../controllers/search.controller.js";
+} from "../controllers/note.controller.ts";
+import { semanticSearch } from "../controllers/search.controller.ts";
 import { protect } from "../middleware/auth.middleware.ts";
 
 const router = express.Router();

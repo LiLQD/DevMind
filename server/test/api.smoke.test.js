@@ -192,11 +192,13 @@ mock.module(moduleUrl("src/config/redis.ts"), {
 mock.module("rate-limit-redis", { exports: { default: RedisStore } });
 const defaultEmbedding = async () => [1, 0];
 const generateEmbedding = mock.fn(defaultEmbedding);
+const { cosineSimilarity } =
+  await import("../src/services/embedding.service.ts");
 mock.module(moduleUrl("src/services/embedding.service.ts"), {
   exports: {
     generateEmbedding,
     generateQueryEmbedding: async () => [1, 0],
-    cosineSimilarity: () => 1,
+    cosineSimilarity,
   },
 });
 
@@ -426,6 +428,43 @@ test("saves a failed content update and excludes its retained vector from search
     [control._id],
   );
   assert.equal(search.body.noteCount, 1);
+});
+
+test("ranks semantic matches with a keyword bonus and excludes results outside the score margin", async () => {
+  const auth = await register("search-owner@example.com");
+  const vectors = new Map([
+    ["Closest by cosine", [0.95, Math.sqrt(1 - 0.95 ** 2)]],
+    ["Work on orchids", [0.92, Math.sqrt(1 - 0.92 ** 2)]],
+    ["Outside the margin", [0.89, Math.sqrt(1 - 0.89 ** 2)]],
+    ["Unrelated note", [0, 1]],
+  ]);
+  generateEmbedding.mock.mockImplementation(async (content) =>
+    vectors.get(content),
+  );
+  const closest = await createNote(auth, "Closest by cosine");
+  const keywordMatch = await createNote(auth, "Work on orchids");
+  await createNote(auth, "Outside the margin");
+  await createNote(auth, "Unrelated note");
+
+  const { body } = await request(app)
+    .post("/api/notes/search")
+    .set("Authorization", auth)
+    .send({ query: "orchids" })
+    .expect(200);
+
+  assert.deepEqual(
+    body.results.map(({ _id }) => _id),
+    [keywordMatch._id, closest._id],
+  );
+  assert.ok(body.results[0].semanticScore < body.results[1].semanticScore);
+  assert.equal(body.results[0].keywordRatio, 1);
+  assert.ok(
+    body.results.every((result) => !Object.hasOwn(result, "embedding")),
+  );
+  assert.equal(body.noteCount, 4);
+  assert.equal(body.totalFound, 2);
+  assert.equal(body.returned, 2);
+  assert.equal(body.threshold, 0.6);
 });
 
 test("saves the updated note when the embedding service rejects", async () => {
