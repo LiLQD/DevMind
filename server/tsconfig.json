@@ -35,6 +35,7 @@
     "src/routes/notes.routes.ts",
     "src/routes/staff.routes.ts",
     "src/routes/tag.routes.ts",
+    "src/server.ts",
     "src/services/embedding.service.ts"
   ]
 }
