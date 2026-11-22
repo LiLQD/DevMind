@@ -1,5 +1,5 @@
 import Note from "../models/Note.js";
-import SearchLog from "../models/SearchLog.js";
+import SearchLog from "../models/SearchLog.ts";
 import {
   generateQueryEmbedding,
   cosineSimilarity,
