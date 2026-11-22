@@ -1,4 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { FormEvent } from "react";
+import type { Collection, Note, SearchResult } from "./types";
 import "./App.css";
 
 // Components
@@ -13,22 +15,53 @@ import SearchBar from "./components/SearchBar";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8080/api";
 
+type User = { name?: string; email?: string };
+type NotificationState = {
+  message: string;
+  type: "info" | "success" | "error";
+};
+type NoteDetail = Note & { relatedNotes?: Note[] };
+type NotePayload = {
+  title: string;
+  content: string;
+  tags: string[];
+  collections?: string[];
+};
+type ResourceResponse<T, Key extends string> = (
+  | T
+  | Record<Key, T>
+  | { data: T }
+) &
+  Partial<Record<Key | "data", T>>;
+
+function unwrapResource<T, Key extends string>(
+  data: ResourceResponse<T, Key>,
+  key: Key,
+): T {
+  return data[key] || data.data || (data as T);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Request failed";
+}
+
 function App() {
   // --- Auth ---
   const [token, setToken] = useState(localStorage.getItem("token"));
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<User | null>(null);
 
   // --- Data ---
-  const [notes, setNotes] = useState([]);
-  const [selectedNote, setSelectedNote] = useState(null);
-  const [relatedNotes, setRelatedNotes] = useState([]);
-  const [searchResults, setSearchResults] = useState([]);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [selectedNote, setSelectedNote] = useState<Note | null>(null);
+  const [relatedNotes, setRelatedNotes] = useState<Note[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
   // --- Collections & Tags ---
-  const [collections, setCollections] = useState([]);
-  const [selectedCollectionFilter, setSelectedCollectionFilter] =
-    useState(null);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [selectedCollectionFilter, setSelectedCollectionFilter] = useState<
+    string | null
+  >(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState("");
   const [newCollectionName, setNewCollectionName] = useState("");
 
@@ -36,14 +69,16 @@ function App() {
   const [theme, setTheme] = useState(
     localStorage.getItem("devmind-theme") || "light",
   );
-  const [notification, setNotification] = useState(null);
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [notification, setNotification] = useState<NotificationState | null>(
+    null,
+  );
+  const [deleteTarget, setDeleteTarget] = useState<Note | null>(null);
 
   // --- Loading states ---
   const [isLoadingNotes, setIsLoadingNotes] = useState(false);
   const [isSearchingAI, setIsSearchingAI] = useState(false);
   const [isCreatingNote, setIsCreatingNote] = useState(false);
-  const [deletingNoteId, setDeletingNoteId] = useState(null);
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
   const [isLoadingNote, setIsLoadingNote] = useState(false);
   const [isEditingNote, setIsEditingNote] = useState(false);
   const [isUpdatingNote, setIsUpdatingNote] = useState(false);
@@ -58,14 +93,19 @@ function App() {
   const [content, setContent] = useState("");
   const [query, setQuery] = useState("");
   const [tagInput, setTagInput] = useState("");
-  const [selectedTagFilter] = useState(null);
+  const [selectedTagFilter] = useState<string | null>(null);
 
   // --- Refs ---
-  const searchInputRef = useRef(null);
-  const notificationTimerRef = useRef(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const notificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   // --- Notification helper ---
-  const showNotification = (message, type = "info") => {
+  const showNotification = (
+    message: string,
+    type: NotificationState["type"] = "info",
+  ) => {
     setNotification({ message, type });
     if (notificationTimerRef.current)
       clearTimeout(notificationTimerRef.current);
@@ -89,31 +129,41 @@ function App() {
   }, [theme]);
 
   // --- API helper ---
-  const apiRequest = async (endpoint, options = {}) => {
+  const apiRequest = async <T,>(
+    endpoint: string,
+    options: RequestInit = {},
+  ): Promise<T> => {
     const headers = {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     };
     const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
-    let data = {};
+    let data: unknown = {};
     try {
       data = await res.json();
     } catch {
       /* body không phải JSON */
     }
-    if (!res.ok)
-      throw new Error(data.message || data.error?.message || "Request failed");
-    return data;
+    if (!res.ok) {
+      const body = data as {
+        message?: string;
+        error?: { message?: string };
+      } | null;
+      throw new Error(
+        body?.message || body?.error?.message || "Request failed",
+      );
+    }
+    return data as T;
   };
 
   // --- Auth handlers ---
-  const handleAuth = async (e) => {
+  const handleAuth = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
       const endpoint = isLogin ? "/auth/login" : "/auth/register";
       const payload = isLogin ? { email, password } : { email, password, name };
-      const data = await apiRequest(endpoint, {
+      const data = await apiRequest<{ token?: string; user: User }>(endpoint, {
         method: "POST",
         body: JSON.stringify(payload),
       });
@@ -130,7 +180,7 @@ function App() {
         );
       }
     } catch (err) {
-      showNotification(err.message, "error");
+      showNotification(errorMessage(err), "error");
     }
   };
 
@@ -158,7 +208,9 @@ function App() {
       if (selectedCollectionFilter)
         params.append("collectionId", selectedCollectionFilter);
       if (params.toString()) url += "?" + params.toString();
-      const data = await apiRequest(url);
+      const data = await apiRequest<Note[] | { notes?: Note[]; data?: Note[] }>(
+        url,
+      );
       setNotes(Array.isArray(data) ? data : data.notes || data.data || []);
     } catch {
       showNotification("Failed to load notes.", "error");
@@ -170,32 +222,40 @@ function App() {
   const fetchCollections = async () => {
     if (!token) return;
     try {
-      const data = await apiRequest("/collections");
+      const data = await apiRequest<Collection[] | { data?: Collection[] }>(
+        "/collections",
+      );
       setCollections(Array.isArray(data) ? data : data.data || []);
     } catch {
       // ignore
     }
   };
 
-  const createCollection = async (name) => {
+  const createCollection = async (name: string) => {
     if (!name.trim()) return null;
     try {
-      const data = await apiRequest("/collections", {
-        method: "POST",
-        body: JSON.stringify({ name: name.trim() }),
-      });
-      const newCol = data.collection || data.data || data;
+      const data = await apiRequest<ResourceResponse<Collection, "collection">>(
+        "/collections",
+        {
+          method: "POST",
+          body: JSON.stringify({ name: name.trim() }),
+        },
+      );
+      const newCol = unwrapResource<Collection, "collection">(
+        data,
+        "collection",
+      );
       setCollections((prev) => [...prev, newCol]);
       showNotification("Collection created.", "success");
       return newCol;
     } catch (err) {
-      showNotification(err.message, "error");
+      showNotification(errorMessage(err), "error");
       return null;
     }
   };
 
   // --- Note CRUD ---
-  const createNote = async (e) => {
+  const createNote = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!title.trim() || !content.trim()) {
       showNotification("Title and content are required.", "error");
@@ -203,7 +263,7 @@ function App() {
     }
     setIsCreatingNote(true);
     try {
-      const payload = {
+      const payload: NotePayload = {
         title: title.trim(),
         content: content.trim(),
         tags: tagInput
@@ -223,13 +283,13 @@ function App() {
       await fetchNotes();
       showNotification("Note created.", "success");
     } catch (err) {
-      showNotification(err.message, "error");
+      showNotification(errorMessage(err), "error");
     } finally {
       setIsCreatingNote(false);
     }
   };
 
-  const updateNote = async (e) => {
+  const updateNote = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedNote || !title.trim() || !content.trim()) {
       showNotification("Title and content are required.", "error");
@@ -237,7 +297,7 @@ function App() {
     }
     setIsUpdatingNote(true);
     try {
-      const payload = {
+      const payload: NotePayload = {
         title: title.trim(),
         content: content.trim(),
         tags: tagInput
@@ -246,11 +306,14 @@ function App() {
           .filter(Boolean),
       };
       if (selectedCollectionId) payload.collections = [selectedCollectionId];
-      const data = await apiRequest(`/notes/${selectedNote._id}`, {
-        method: "PUT",
-        body: JSON.stringify(payload),
-      });
-      const updated = data.note || data.data || data;
+      const data = await apiRequest<ResourceResponse<Note, "note">>(
+        `/notes/${selectedNote._id}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        },
+      );
+      const updated = unwrapResource<Note, "note">(data, "note");
       setSelectedNote(updated);
       setIsEditingNote(false);
       setTitle("");
@@ -260,7 +323,7 @@ function App() {
       await fetchNotes();
       showNotification("Note updated.", "success");
     } catch (err) {
-      showNotification(err.message, "error");
+      showNotification(errorMessage(err), "error");
     } finally {
       setIsUpdatingNote(false);
     }
@@ -280,19 +343,21 @@ function App() {
       await fetchNotes();
       showNotification("Note deleted.", "success");
     } catch (err) {
-      showNotification(err.message, "error");
+      showNotification(errorMessage(err), "error");
     } finally {
       setDeletingNoteId(null);
     }
   };
 
-  const viewNote = async (id) => {
+  const viewNote = async (id: string) => {
     if (isEditingNote) cancelEditNote();
     setIsLoadingNote(true);
     setIsLoadingRelated(true);
     try {
-      const data = await apiRequest(`/notes/${id}`);
-      const note = data.note || data.data || data;
+      const data = await apiRequest<
+        ResourceResponse<NoteDetail, "note"> & { relatedNotes?: Note[] }
+      >(`/notes/${id}`);
+      const note = unwrapResource<NoteDetail, "note">(data, "note");
       setSelectedNote(note);
       setRelatedNotes(data.relatedNotes || note.relatedNotes || []);
     } catch {
@@ -304,7 +369,7 @@ function App() {
   };
 
   // --- Search ---
-  const handleSearch = async (e) => {
+  const handleSearch = async (e?: FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
     if (!query.trim()) {
       showNotification("Enter a search query.", "error");
@@ -312,7 +377,10 @@ function App() {
     }
     setIsSearchingAI(true);
     try {
-      const data = await apiRequest("/notes/search", {
+      const data = await apiRequest<{
+        results?: SearchResult[];
+        data?: SearchResult[];
+      }>("/notes/search", {
         method: "POST",
         body: JSON.stringify({ query: query.trim() }),
       });
@@ -322,10 +390,11 @@ function App() {
       if (results.length === 0)
         showNotification("No matching notes found.", "info");
     } catch (err) {
+      const message = errorMessage(err);
       showNotification(
-        err.message.includes("unavailable")
+        message.includes("unavailable")
           ? "Semantic search temporarily unavailable."
-          : err.message,
+          : message,
         "error",
       );
     } finally {
@@ -340,17 +409,20 @@ function App() {
   };
 
   // --- Edit helpers ---
-  const beginEditNote = (note) => {
+  const beginEditNote = (note: Note) => {
     setSelectedNote(note);
     setIsEditingNote(true);
     setTitle(note.title || "");
     setContent(note.content || "");
     const tags = (note.tags || []).map((t) => t.name || t).join(", ");
     setTagInput(tags);
-    const collectionId = note.collection?._id || note.collection || "";
+    const collectionId =
+      typeof note.collection === "string"
+        ? note.collection
+        : note.collection?._id || "";
     setSelectedCollectionId(collectionId);
     window.requestAnimationFrame(() =>
-      document.querySelector("#note-title")?.focus(),
+      document.querySelector<HTMLInputElement>("#note-title")?.focus(),
     );
   };
   const cancelEditNote = () => {
@@ -364,10 +436,10 @@ function App() {
 
   // --- Keyboard shortcuts ---
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
       const isTyping = ["input", "textarea"].includes(
-        document.activeElement?.tagName?.toLowerCase(),
+        document.activeElement?.tagName?.toLowerCase() ?? "",
       );
       if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -378,7 +450,7 @@ function App() {
         e.preventDefault();
         cancelEditNote();
         window.requestAnimationFrame(() =>
-          document.querySelector("#note-title")?.focus(),
+          document.querySelector<HTMLInputElement>("#note-title")?.focus(),
         );
         return;
       }
@@ -388,7 +460,9 @@ function App() {
         document.activeElement?.closest(".create-panel")
       ) {
         e.preventDefault();
-        document.querySelector(".create-form")?.requestSubmit();
+        document
+          .querySelector<HTMLFormElement>(".create-form")
+          ?.requestSubmit();
         return;
       }
       if (mod && e.key === "Delete" && selectedNote && !isTyping) {
@@ -473,7 +547,6 @@ function App() {
             setQuery={setQuery}
             onSearch={handleSearch}
             onClearSearch={clearSearch}
-            isSearching={isSearching}
             isSearchingAI={isSearchingAI}
             searchInputRef={searchInputRef}
           />
