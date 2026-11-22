@@ -5,7 +5,7 @@ import {
   getNote,
   updateNote,
   deleteNote,
-} from "../controllers/note.controller.js";
+} from "../controllers/note.controller.ts";
 import { semanticSearch } from "../controllers/search.controller.js";
 import { protect } from "../middleware/auth.middleware.ts";
 

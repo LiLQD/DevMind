@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
+    "lib": ["ES2023", "DOM"],
     "module": "NodeNext",
     "strict": true,
     "allowJs": true,
@@ -16,6 +17,7 @@
     "src/config/redis.ts",
     "src/controllers/auth.controller.ts",
     "src/controllers/collection.controller.ts",
+    "src/controllers/note.controller.ts",
     "src/controllers/tag.controller.ts",
     "src/middleware/auth.middleware.ts",
     "src/middleware/rateLimiter.ts",

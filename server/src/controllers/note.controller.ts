@@ -1,3 +1,5 @@
+import type { Request, RequestHandler } from "express";
+import type { Types } from "mongoose";
 import Tag from "../models/Tag.ts";
 import Note from "../models/Note.ts";
 import {
@@ -5,8 +7,21 @@ import {
   cosineSimilarity,
 } from "../services/embedding.service.ts";
 
+type NoteBody = {
+  title?: string;
+  content?: string;
+  tags?: unknown[] | null;
+  collections?: unknown;
+};
+type NoteFilters = { tagId?: string; collectionId?: string };
+type NoteParams = { id: string };
+type RouteParams = Request["params"];
+
 // Resolve tag names to ObjectIds, creating missing tags for this user.
-const resolveTagIds = async (names, userId) => {
+const resolveTagIds = async (
+  names: NoteBody["tags"],
+  userId: Types.ObjectId,
+) => {
   const unique = [
     ...new Set((names || []).map((n) => String(n).trim()).filter(Boolean)),
   ];
@@ -17,13 +32,17 @@ const resolveTagIds = async (names, userId) => {
       { $setOnInsert: { name, userId } },
       { upsert: true, returnDocument: "after" },
     );
-    ids.push(tag._id);
+    ids.push(tag!._id);
   }
   return ids;
 };
 
 // Create note
-export const createNote = async (req, res) => {
+export const createNote: RequestHandler<
+  RouteParams,
+  unknown,
+  NoteBody
+> = async (req, res) => {
   try {
     const { title, content, tags, collections } = req.body;
 
@@ -38,9 +57,9 @@ export const createNote = async (req, res) => {
     const note = new Note({
       title,
       content,
-      userId: req.user.id,
+      userId: req.user!.id,
       embeddingStatus: "pending",
-      tags: await resolveTagIds(tags, req.user.id),
+      tags: await resolveTagIds(tags, req.user!.id),
       collections: collections || [],
     });
 
@@ -70,13 +89,19 @@ export const createNote = async (req, res) => {
 };
 
 // Get all notes
-export const getNotes = async (req, res) => {
+export const getNotes: RequestHandler<
+  RouteParams,
+  unknown,
+  unknown,
+  NoteFilters
+> = async (req, res) => {
   try {
     const { tagId, collectionId } = req.query;
-    const query = { userId: req.user.id };
-
-    if (tagId) query.tags = tagId;
-    if (collectionId) query.collections = collectionId;
+    const query = {
+      userId: req.user!.id,
+      ...(tagId ? { tags: tagId } : {}),
+      ...(collectionId ? { collections: collectionId } : {}),
+    };
 
     const notes = await Note.find(query)
       .populate(["tags", "collections"])
@@ -90,7 +115,7 @@ export const getNotes = async (req, res) => {
 };
 
 // Get single note with related suggestions
-export const getNote = async (req, res) => {
+export const getNote: RequestHandler<NoteParams> = async (req, res) => {
   try {
     const note = await Note.findById(req.params.id).populate([
       "tags",
@@ -101,15 +126,15 @@ export const getNote = async (req, res) => {
       return res.status(404).json({ message: "Không tìm thấy ghi chú" });
     }
 
-    if (note.userId.toString() !== req.user.id.toString()) {
+    if (note.userId.toString() !== req.user!.id.toString()) {
       return res.status(403).json({ message: "Không có quyền truy cập" });
     }
 
     // Get related notes if embedding exists
-    let relatedNotes = [];
+    const relatedNotes = [];
     if (note.embeddingStatus === "success" && note.embedding) {
       const otherNotes = await Note.find({
-        userId: req.user.id,
+        userId: req.user!.id,
         _id: { $ne: note._id },
         embeddingStatus: "success",
       }).populate(["tags", "collections"]); // ✅ Populate tags & collections
@@ -134,7 +159,7 @@ export const getNote = async (req, res) => {
         }
       }
 
-      relatedNotes = deduped.slice(0, 5);
+      relatedNotes.push(...deduped.slice(0, 5));
     }
 
     res.json({
@@ -148,7 +173,10 @@ export const getNote = async (req, res) => {
 };
 
 // Update note
-export const updateNote = async (req, res) => {
+export const updateNote: RequestHandler<NoteParams, unknown, NoteBody> = async (
+  req,
+  res,
+) => {
   try {
     const { title, content, tags, collections } = req.body;
     const note = await Note.findById(req.params.id);
@@ -157,15 +185,16 @@ export const updateNote = async (req, res) => {
       return res.status(404).json({ message: "Không tìm thấy ghi chú" });
     }
 
-    if (note.userId.toString() !== req.user.id.toString()) {
+    if (note.userId.toString() !== req.user!.id.toString()) {
       return res.status(403).json({ message: "Không có quyền" });
     }
 
-    const contentChanged = Boolean(content) && content !== note.content;
+    const contentChanged = content && content !== note.content;
     if (title) note.title = title;
     if (content) note.content = content;
-    if (tags) note.tags = await resolveTagIds(tags, req.user.id);
-    if (collections) note.collections = collections;
+    if (tags) note.tags = await resolveTagIds(tags, req.user!.id);
+    // Mongoose casts incoming collection IDs when assigning the document path.
+    if (collections) note.collections = collections as typeof note.collections;
 
     if (contentChanged) {
       note.embeddingStatus = "pending";
@@ -192,7 +221,7 @@ export const updateNote = async (req, res) => {
 };
 
 // Delete note
-export const deleteNote = async (req, res) => {
+export const deleteNote: RequestHandler<NoteParams> = async (req, res) => {
   try {
     const note = await Note.findById(req.params.id);
 
@@ -200,7 +229,7 @@ export const deleteNote = async (req, res) => {
       return res.status(404).json({ message: "Không tìm thấy ghi chú" });
     }
 
-    if (note.userId.toString() !== req.user.id.toString()) {
+    if (note.userId.toString() !== req.user!.id.toString()) {
       return res.status(403).json({ message: "Không có quyền" });
     }
 
