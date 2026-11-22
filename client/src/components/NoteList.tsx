@@ -2,6 +2,7 @@ import type { Note } from "../types";
 
 export type NoteListProps = {
   notes: Note[];
+  exactSearchQuery: string;
   selectedNoteId?: string;
   isLoading: boolean;
   onViewNote: (id: string) => void;
@@ -15,6 +16,7 @@ import NoteItem from "./NoteItem";
 
 export default function NoteList({
   notes,
+  exactSearchQuery,
   selectedNoteId,
   isLoading,
   onViewNote,
@@ -53,6 +55,7 @@ export default function NoteList({
         <NoteItem
           key={note._id}
           note={note}
+          exactSearchQuery={exactSearchQuery}
           isActive={note._id === selectedNoteId}
           onView={() => onViewNote(note._id)}
           onEdit={() => onEditNote(note)}

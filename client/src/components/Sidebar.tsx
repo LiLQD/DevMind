@@ -12,6 +12,7 @@ import NoteList from "./NoteList";
 
 export default function Sidebar({
   notes,
+  exactSearchQuery,
   selectedNoteId,
   isLoading,
   isSearching,
@@ -51,6 +52,7 @@ export default function Sidebar({
 
       <NoteList
         notes={notes}
+        exactSearchQuery={exactSearchQuery}
         selectedNoteId={selectedNoteId}
         isLoading={isLoading}
         onViewNote={onViewNote}
