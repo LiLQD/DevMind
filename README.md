@@ -122,7 +122,7 @@ The frontend starts on `http://localhost:5173`.
 For local billing simulation, set `NODE_ENV=development` and
 `ENABLE_MOCK_BILLING=true` in the backend environment. Set
 `VITE_ENABLE_MOCK_BILLING=true` in `client/.env.local` and restart both dev
-servers. Sign in and open **Mock checkout** in the workspace toolbar.
+servers. Sign in, open **Plan & usage**, and choose **Upgrade to Pro**.
 
 For a hosted demo, set `NODE_ENV=production` and
 `ENABLE_PRODUCTION_MOCK_BILLING=true` on the backend. Set
