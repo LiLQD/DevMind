@@ -1535,7 +1535,7 @@ button:disabled {
   color: var(--text-muted);
 }
 
-.mock-checkout-dialog {
+.plan-dialog {
   width: min(30rem, calc(100% - 2rem));
   max-height: calc(100% - 2rem);
   margin: auto;
@@ -1546,17 +1546,84 @@ button:disabled {
   color: var(--text);
 }
 
-.mock-checkout-dialog::backdrop {
+.plan-dialog::backdrop {
   background: rgb(0 0 0 / 45%);
 }
 
-.mock-checkout-dialog p {
-  margin-block: var(--space-3);
+.plan-dialog p {
+  margin-block: var(--space-2);
 }
 
-.mock-checkout-controls {
+.plan-dialog-header,
+.plan-current,
+.plan-usage div,
+.plan-order {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.plan-dialog-header h2 {
+  font-size: 1.25rem;
+}
+
+.plan-current {
   margin-block-start: var(--space-4);
+  padding-block: var(--space-2);
+  font-weight: 600;
+}
+
+.plan-usage div {
+  padding-block: var(--space-2);
+  border-block-start: var(--border-width) solid var(--border);
+  font-size: var(--font-control);
+}
+
+.plan-usage dd {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-card {
+  margin-block-start: var(--space-4);
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-dialog);
+  background: var(--surface-subtle);
+}
+
+.plan-order > span,
+.plan-order > strong {
+  white-space: nowrap;
+}
+
+.plan-order p,
+.plan-demo,
+.plan-demo-options {
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+}
+
+.plan-price {
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-upgrade {
+  width: 100%;
+  min-height: var(--touch-target);
+  margin-block-start: var(--space-2);
+}
+
+.plan-demo-options {
+  margin-block-start: var(--space-3);
+}
+
+.plan-demo-options summary {
+  cursor: pointer;
+}
+
+.plan-demo-options button {
+  margin-block-start: var(--space-2);
 }
