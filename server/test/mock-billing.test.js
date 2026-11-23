@@ -7,6 +7,11 @@ import request from "supertest";
 const uri = process.env.MOCK_BILLING_TEST_MONGODB_URI;
 const moduleUrl = (path) => new URL(`../src/${path}`, import.meta.url).href;
 
+async function upgrade(account) {
+  const { body: checkout } = await account.start().expect(200);
+  await account.action(checkout.id, "succeed", checkout.revision).expect(200);
+}
+
 test(
   "opt-in production mock billing lifecycle with MongoDB",
   {
@@ -116,7 +121,7 @@ test(
 
     await t.test(
       "bulk imports enforce Pro and handle partial failure and retry",
-      async (t) => {
+      async (subtest) => {
         const owner = await register("bulk-owner@example.com");
         const other = await register("bulk-other@example.com");
         const first = {
@@ -137,19 +142,15 @@ test(
         await owner.importNotes([first]).expect(403);
         assert.equal(await Note.countDocuments({ userId: owner.accountId }), 0);
 
-        async function upgrade(account) {
-          const { body: checkout } = await account.start().expect(200);
-          await account
-            .action(checkout.id, "succeed", checkout.revision)
-            .expect(200);
-        }
         await upgrade(owner);
         await upgrade(other);
-        await owner.importNotes(Array(6).fill(first)).expect(400);
+        await owner
+          .importNotes(Array.from({ length: 6 }, () => ({ ...first })))
+          .expect(400);
 
         const save = Note.prototype.save;
         let failOnce = true;
-        t.mock.method(Note.prototype, "save", async function (...args) {
+        subtest.mock.method(Note.prototype, "save", async function (...args) {
           if (failOnce && this.title === second.title) {
             failOnce = false;
             throw new Error("Transient save failure");

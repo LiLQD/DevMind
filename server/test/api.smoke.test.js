@@ -957,8 +957,8 @@ test("bulk note import requires authentication and an effective Pro plan", async
   const path = "/api/notes/import";
   const item = { key: "note-1", title: "Example", content: "# Example" };
   const auth = await register("bulk-import@example.com");
-  const submit = (notes) =>
-    request(app).post(path).set("Authorization", auth).send({ notes });
+  const submit = (items) =>
+    request(app).post(path).set("Authorization", auth).send({ notes: items });
 
   await request(app)
     .post(path)
@@ -975,7 +975,7 @@ test("bulk note import requires authentication and an effective Pro plan", async
   await submit([item]).expect(403);
   subscriptions[0].billingProvider = "stripe";
   await submit([]).expect(400);
-  await submit(Array(6).fill(item)).expect(400);
+  await submit(Array.from({ length: 6 }, () => ({ ...item }))).expect(400);
   findSubscription.mock.mockImplementationOnce(() => {
     throw new Error("Subscription unavailable");
   });

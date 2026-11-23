@@ -28,6 +28,14 @@ function parseItem(item: unknown) {
   return { key: item.key, title, content };
 }
 
+function savedResult(note: InstanceType<typeof Note>) {
+  return {
+    status: "saved",
+    noteId: note._id.toString(),
+    embeddingStatus: note.embeddingStatus,
+  };
+}
+
 async function importItem(
   userId: Types.ObjectId,
   item: NonNullable<ReturnType<typeof parseItem>>,
@@ -36,11 +44,6 @@ async function importItem(
   const importFingerprint = createHash("sha256")
     .update(JSON.stringify([title, content]))
     .digest("hex");
-  const saved = (note: InstanceType<typeof Note>) => ({
-    status: "saved",
-    noteId: note._id.toString(),
-    embeddingStatus: note.embeddingStatus,
-  });
   const note = new Note({
     userId,
     title,
@@ -66,19 +69,19 @@ async function importItem(
     if (existing.importFingerprint !== importFingerprint) {
       return { status: "failed", code: "IMPORT_KEY_CONFLICT" };
     }
-    return saved(existing);
+    return savedResult(existing);
   }
 
   try {
     await embedNewNote(note, userId, content);
-    return saved(note);
+    return savedResult(note);
   } catch {
     // The note insert succeeded. A retry must preserve it and avoid another Gemini attempt.
     console.error(
       "Could not store the imported note embedding:",
       note._id.toString(),
     );
-    return { ...saved(note), embeddingStatus: "pending" };
+    return { ...savedResult(note), embeddingStatus: "pending" };
   }
 }
 
