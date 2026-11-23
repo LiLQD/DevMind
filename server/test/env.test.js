@@ -52,11 +52,18 @@ test("loads required settings and development defaults", (t) => {
   });
 });
 
-test("mock billing requires an explicit development environment and opt-in", (t) => {
+test("mock billing requires the opt-in for the active environment", (t) => {
   for (const [settings, enabled] of [
     [{ ENABLE_MOCK_BILLING: "true" }, false],
     [{ NODE_ENV: "production", ENABLE_MOCK_BILLING: "true" }, false],
     [{ NODE_ENV: "test", ENABLE_MOCK_BILLING: "true" }, false],
+    [{ ENABLE_PRODUCTION_MOCK_BILLING: "true" }, false],
+    [
+      { NODE_ENV: "development", ENABLE_PRODUCTION_MOCK_BILLING: "true" },
+      false,
+    ],
+    [{ NODE_ENV: "production", ENABLE_PRODUCTION_MOCK_BILLING: "1" }, false],
+    [{ NODE_ENV: "production", ENABLE_PRODUCTION_MOCK_BILLING: "true" }, true],
     [{ NODE_ENV: "development", ENABLE_MOCK_BILLING: "1" }, false],
     [{ NODE_ENV: "development", ENABLE_MOCK_BILLING: "true" }, true],
   ]) {

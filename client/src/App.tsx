@@ -14,6 +14,7 @@ import ConfirmModal from "./components/ConfirmModal";
 import MockCheckoutPanel from "./components/MockCheckoutPanel";
 import SearchBar from "./components/SearchBar";
 
+const mockCheckoutEnabled = import.meta.env.VITE_ENABLE_MOCK_BILLING === "true";
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8080/api";
 
 type User = { name?: string; email?: string };
@@ -678,7 +679,7 @@ function App() {
         !token ||
         deleteTarget ||
         discardAction ||
-        (import.meta.env.DEV &&
+        (mockCheckoutEnabled &&
           document.querySelector(".mock-checkout-dialog[open]"))
       )
         return;
@@ -767,8 +768,7 @@ function App() {
 
       <TopBar
         accountControl={
-          import.meta.env.DEV &&
-          import.meta.env.VITE_ENABLE_MOCK_BILLING === "true" ? (
+          mockCheckoutEnabled ? (
             <MockCheckoutPanel key={token} apiRequest={apiRequest} />
           ) : undefined
         }
