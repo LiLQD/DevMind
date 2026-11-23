@@ -2,6 +2,7 @@ import type { Request, RequestHandler } from "express";
 import type { Types } from "mongoose";
 import Tag from "../models/Tag.ts";
 import Note from "../models/Note.ts";
+import { embedNewNote } from "../services/note-embedding.service.ts";
 import { recordUsage } from "../services/usage.service.ts";
 import {
   generateEmbedding,
@@ -66,21 +67,7 @@ export const createNote: RequestHandler<
 
     await note.save();
 
-    try {
-      await recordUsage(req.user!.id, "noteEmbeddingRequests");
-      const embedding = await generateEmbedding(content);
-      if (embedding) {
-        note.embedding = embedding;
-        note.embeddingStatus = "success";
-      } else {
-        note.embeddingStatus = "failed";
-      }
-      await note.save();
-    } catch (aiError) {
-      note.embeddingStatus = "failed";
-      await note.save();
-      console.error("AI embedding failed but note saved:", aiError);
-    }
+    await embedNewNote(note, req.user!.id, content);
 
     const populatedNote = await note.populate(["tags", "collections"]);
     res.status(201).json(populatedNote);

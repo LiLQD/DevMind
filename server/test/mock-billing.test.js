@@ -7,6 +7,11 @@ import request from "supertest";
 const uri = process.env.MOCK_BILLING_TEST_MONGODB_URI;
 const moduleUrl = (path) => new URL(`../src/${path}`, import.meta.url).href;
 
+async function upgrade(account) {
+  const { body: checkout } = await account.start().expect(200);
+  await account.action(checkout.id, "succeed", checkout.revision).expect(200);
+}
+
 test(
   "opt-in production mock billing lifecycle with MongoDB",
   {
@@ -40,13 +45,16 @@ test(
         },
       },
     });
+    const generateEmbedding = mock.fn(async (text) =>
+      text === "Embedding fails" ? null : [1, 0],
+    );
     const generateQueryEmbedding = mock.fn(async () => [1, 0]);
     const { cosineSimilarity } =
       await import("../src/services/embedding.service.ts");
     mock.module(moduleUrl("services/embedding.service.ts"), {
       exports: {
         cosineSimilarity,
-        generateEmbedding: async () => [1, 0],
+        generateEmbedding,
         generateQueryEmbedding,
       },
     });
@@ -83,6 +91,11 @@ test(
       const authorization = `Bearer ${body.token}`;
       return {
         accountId,
+        importNotes: (notes) =>
+          client
+            .post("/api/notes/import")
+            .set("Authorization", authorization)
+            .send({ notes }),
         start: () => client.post(base).set("Authorization", authorization),
         read: (id) =>
           client.get(`${base}/${id}`).set("Authorization", authorization),
@@ -105,6 +118,111 @@ test(
             .send({ query: "billing" }),
       };
     }
+
+    await t.test(
+      "bulk imports enforce Pro and handle partial failure and retry",
+      async (subtest) => {
+        const owner = await register("bulk-owner@example.com");
+        const other = await register("bulk-other@example.com");
+        const first = {
+          key: "file-one",
+          title: "First note",
+          content: "# First",
+        };
+        const second = {
+          key: "file-two",
+          title: "Second note",
+          content: "Embedding fails",
+        };
+        const invalid = { key: "invalid", title: " ", content: "# Invalid" };
+        await client
+          .post("/api/notes/import")
+          .send({ notes: [first] })
+          .expect(401);
+        await owner.importNotes([first]).expect(403);
+        assert.equal(await Note.countDocuments({ userId: owner.accountId }), 0);
+
+        await upgrade(owner);
+        await upgrade(other);
+        await owner
+          .importNotes(Array.from({ length: 6 }, () => ({ ...first })))
+          .expect(400);
+
+        const save = Note.prototype.save;
+        let failOnce = true;
+        subtest.mock.method(Note.prototype, "save", async function (...args) {
+          if (failOnce && this.title === second.title) {
+            failOnce = false;
+            throw new Error("Transient save failure");
+          }
+          return Reflect.apply(save, this, args);
+        });
+
+        const { body: initial } = await owner
+          .importNotes([first, second, invalid])
+          .expect(200);
+        assert.deepEqual(
+          initial.results.map(({ index, status, code }) => [
+            index,
+            status,
+            code,
+          ]),
+          [
+            [0, "saved", undefined],
+            [1, "failed", "SAVE_FAILED"],
+            [2, "failed", "INVALID_NOTE"],
+          ],
+        );
+        const { body: retry } = await owner
+          .importNotes([first, second])
+          .expect(200);
+        assert.deepEqual(retry.results[0], initial.results[0]);
+        assert.equal(retry.results[1].status, "saved");
+        assert.equal(retry.results[1].embeddingStatus, "failed");
+        assert.equal(
+          (await owner.subscription()).usage.noteEmbeddingRequests,
+          2,
+        );
+        assert.equal(await Note.countDocuments({ userId: owner.accountId }), 2);
+        assert.equal(
+          (await Note.findById(initial.results[0].noteId).lean()).importKey,
+          undefined,
+        );
+
+        const { body: conflict } = await owner
+          .importNotes([{ ...first, title: "Changed" }])
+          .expect(200);
+        assert.equal(conflict.results[0].code, "IMPORT_KEY_CONFLICT");
+
+        const concurrent = {
+          key: "file-three",
+          title: "Third note",
+          content: "# Third",
+        };
+        const before = generateEmbedding.mock.callCount();
+        const responses = await Promise.all([
+          owner.importNotes([concurrent]).expect(200),
+          owner.importNotes([concurrent]).expect(200),
+        ]);
+        const outcomes = responses.map(({ body }) => body.results[0]);
+        assert.ok(outcomes.every((outcome) => outcome.status === "saved"));
+        assert.equal(outcomes[0].noteId, outcomes[1].noteId);
+        assert.equal(generateEmbedding.mock.callCount(), before + 1);
+        assert.equal(
+          (await owner.subscription()).usage.noteEmbeddingRequests,
+          3,
+        );
+
+        const { body: otherResult } = await other
+          .importNotes([first])
+          .expect(200);
+        assert.equal(otherResult.results[0].status, "saved");
+        assert.notEqual(
+          otherResult.results[0].noteId,
+          initial.results[0].noteId,
+        );
+      },
+    );
 
     await t.test(
       "requires authentication, ownership, and valid action input",
