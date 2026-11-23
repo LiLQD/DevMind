@@ -117,6 +117,13 @@ pnpm run dev
 
 The frontend starts on `http://localhost:5173`.
 
+### Mock checkout
+
+For local billing simulation, set `NODE_ENV=development` and
+`ENABLE_MOCK_BILLING=true` in the backend environment. Set
+`VITE_ENABLE_MOCK_BILLING=true` in `client/.env.local` and restart both dev
+servers. Sign in and open **Mock checkout** in the workspace toolbar.
+
 ## 🔐 Environment Variables
 
 ### Backend
