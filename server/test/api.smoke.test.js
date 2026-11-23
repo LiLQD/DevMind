@@ -952,3 +952,34 @@ test("production hides mock billing routes and ignores persisted mock entitlemen
   assert.equal(body.plan, "free");
   assert.equal(body.status, null);
 });
+
+test("bulk note import requires authentication and an effective Pro plan", async () => {
+  const path = "/api/notes/import";
+  const item = { key: "note-1", title: "Example", content: "# Example" };
+  const auth = await register("bulk-import@example.com");
+  const submit = (items) =>
+    request(app).post(path).set("Authorization", auth).send({ notes: items });
+
+  await request(app)
+    .post(path)
+    .send({ notes: [item] })
+    .expect(401);
+  await submit([item]).expect(403);
+  subscriptions.push({
+    accountId: accounts[0]._id,
+    billingProvider: "mock",
+    plan: "pro",
+    status: "active",
+    currentPeriodEnd: new Date(Date.now() + 86_400_000),
+  });
+  await submit([item]).expect(403);
+  subscriptions[0].billingProvider = "stripe";
+  await submit([]).expect(400);
+  await submit(Array.from({ length: 6 }, () => ({ ...item }))).expect(400);
+  findSubscription.mock.mockImplementationOnce(() => {
+    throw new Error("Subscription unavailable");
+  });
+  await submit([item]).expect(503);
+  assert.equal(notes.length, 0);
+  assert.equal(generateEmbedding.mock.callCount(), 0);
+});

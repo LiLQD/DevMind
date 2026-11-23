@@ -12,6 +12,8 @@ const noteSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    importKey: { type: String, select: false },
+    importFingerprint: { type: String, select: false },
     embedding: {
       type: [Number],
       default: null,
@@ -43,6 +45,10 @@ const noteSchema = new mongoose.Schema(
 );
 
 noteSchema.index({ userId: 1, embeddingStatus: 1 });
+noteSchema.index(
+  { userId: 1, importKey: 1 },
+  { unique: true, partialFilterExpression: { importKey: { $type: "string" } } },
+);
 
 const Note = mongoose.model("Note", noteSchema);
 export default Note;
