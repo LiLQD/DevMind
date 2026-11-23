@@ -124,6 +124,13 @@ For local billing simulation, set `NODE_ENV=development` and
 `VITE_ENABLE_MOCK_BILLING=true` in `client/.env.local` and restart both dev
 servers. Sign in and open **Mock checkout** in the workspace toolbar.
 
+For a hosted demo, set `NODE_ENV=production` and
+`ENABLE_PRODUCTION_MOCK_BILLING=true` on the backend. Set
+`VITE_ENABLE_MOCK_BILLING=true` in the frontend's production build environment
+and redeploy both services. Every signed-in user can simulate a Pro upgrade
+and use the Pro semantic-search quota while the backend flag is enabled.
+Removing the backend flag disables the mock API and mock Pro access.
+
 ## 🔐 Environment Variables
 
 ### Backend
