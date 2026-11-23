@@ -3,8 +3,7 @@ import type { ChangeEvent, FormEventHandler, MouseEvent } from "react";
 import type { Collection } from "../types";
 import NoteMarkdown from "./NoteMarkdown";
 
-// Express caps the JSON request body at 1 MiB.
-const maxNoteRequestBytes = 1024 * 1024;
+import { fitsNoteRequest, readMarkdownFile } from "../markdownFile";
 
 type CollectionOption = Partial<Collection> & { id?: string };
 
@@ -72,41 +71,17 @@ export default function CreatePanel({
     if (!file || isImporting) return;
 
     setImportError("");
-    if (!/\.md$/i.test(file.name)) {
-      setImportError("Choose a .md Markdown file.");
-      return;
-    }
-    if (file.size > maxNoteRequestBytes) {
-      setImportError("This file exceeds the 1 MiB note request limit.");
-      return;
-    }
-
     setIsImporting(true);
     try {
-      const markdown = new TextDecoder("utf-8", { fatal: true }).decode(
-        await file.arrayBuffer(),
-      );
+      const { title: importedTitle, content: markdown } =
+        await readMarkdownFile(file);
       if (!input.isConnected) return;
-      if (!markdown.trim()) {
-        setImportError("This Markdown file is empty.");
-        return;
-      }
-      if (markdown.includes("\0")) {
-        setImportError("Choose a UTF-8 Markdown text file.");
-        return;
-      }
-
-      const importedTitle =
-        file.name.slice(0, -3).replace(/\s+/g, " ").trim().slice(0, 200) ||
-        "Untitled note";
-      const payload = new TextEncoder().encode(
-        JSON.stringify({
-          title: importedTitle,
-          content: markdown.trim(),
-          tags: [],
-        }),
-      );
-      if (payload.byteLength > maxNoteRequestBytes) {
+      const body = JSON.stringify({
+        title: importedTitle,
+        content: markdown.trim(),
+        tags: [],
+      });
+      if (!fitsNoteRequest(body)) {
         setImportError("This file exceeds the 1 MiB note request limit.");
         return;
       }
@@ -115,9 +90,14 @@ export default function CreatePanel({
       setTitle(importedTitle);
       setContent(markdown);
       window.requestAnimationFrame(() => titleInputRef.current?.focus());
-    } catch {
-      if (input.isConnected)
-        setImportError("Could not read this file as UTF-8 Markdown.");
+    } catch (error) {
+      if (input.isConnected) {
+        setImportError(
+          error instanceof Error
+            ? error.message
+            : "Could not read this file as UTF-8 Markdown.",
+        );
+      }
     } finally {
       if (input.isConnected) setIsImporting(false);
     }

@@ -1639,3 +1639,41 @@ button:disabled {
 .plan-demo-options button {
   margin-block-start: var(--space-2);
 }
+
+.bulk-import-dialog {
+  width: min(38rem, calc(100% - 2rem));
+}
+
+.bulk-import-files {
+  display: grid;
+  gap: var(--space-2);
+  padding: 0;
+  margin-block: var(--space-3);
+  list-style: none;
+}
+
+.bulk-import-files li {
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-control);
+  overflow-wrap: anywhere;
+}
+
+.bulk-import-files summary {
+  cursor: pointer;
+}
+
+.bulk-import-files pre {
+  max-height: 12rem;
+  overflow: auto;
+  padding: var(--space-2);
+  background: var(--surface-subtle);
+  white-space: pre-wrap;
+}
+
+.bulk-import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block: var(--space-3);
+}
