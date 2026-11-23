@@ -1,6 +1,9 @@
+import type { ReactNode } from "react";
+
 type TopBarProps = {
   notesCount: number;
   userLabel: string;
+  accountControl?: ReactNode;
   theme: string;
   onToggleTheme: () => void;
   onLogout: () => void;
@@ -11,6 +14,7 @@ type TopBarProps = {
 export default function TopBar({
   notesCount,
   userLabel,
+  accountControl,
   theme,
   onToggleTheme,
   onLogout,
@@ -31,6 +35,7 @@ export default function TopBar({
         aria-label="Workspace controls"
       >
         <span className="account-label">{userLabel}</span>
+        {accountControl}
         <button
           type="button"
           className="topbar-button"

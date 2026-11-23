@@ -11,6 +11,7 @@ import NoteView from "./components/NoteView";
 import CreatePanel from "./components/CreatePanel";
 import Notification from "./components/Notification";
 import ConfirmModal from "./components/ConfirmModal";
+import MockCheckoutPanel from "./components/MockCheckoutPanel";
 import SearchBar from "./components/SearchBar";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8080/api";
@@ -673,7 +674,14 @@ function App() {
   // --- Keyboard shortcuts ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!token || deleteTarget || discardAction) return;
+      if (
+        !token ||
+        deleteTarget ||
+        discardAction ||
+        (import.meta.env.DEV &&
+          document.querySelector(".mock-checkout-dialog[open]"))
+      )
+        return;
       const mod = e.ctrlKey || e.metaKey;
       const isTyping = ["input", "textarea"].includes(
         document.activeElement?.tagName?.toLowerCase() ?? "",
@@ -758,6 +766,12 @@ function App() {
       />
 
       <TopBar
+        accountControl={
+          import.meta.env.DEV &&
+          import.meta.env.VITE_ENABLE_MOCK_BILLING === "true" ? (
+            <MockCheckoutPanel key={token} apiRequest={apiRequest} />
+          ) : undefined
+        }
         onExportNotes={exportNotes}
         isExportingNotes={isExportingNotes}
         notesCount={notes.length}

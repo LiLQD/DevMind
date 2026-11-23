@@ -1534,3 +1534,29 @@ button:disabled {
 :root[data-theme="dark"] .notification-close {
   color: var(--text-muted);
 }
+
+.mock-checkout-dialog {
+  width: min(30rem, calc(100% - 2rem));
+  max-height: calc(100% - 2rem);
+  margin: auto;
+  padding: var(--space-6);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.mock-checkout-dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
+.mock-checkout-dialog p {
+  margin-block: var(--space-3);
+}
+
+.mock-checkout-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block-start: var(--space-4);
+}
