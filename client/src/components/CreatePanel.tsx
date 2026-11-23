@@ -3,6 +3,9 @@ import type { ChangeEvent, FormEventHandler, MouseEvent } from "react";
 import type { Collection } from "../types";
 import NoteMarkdown from "./NoteMarkdown";
 
+// Express caps the JSON request body at 1 MiB.
+const maxNoteRequestBytes = 1024 * 1024;
+
 type CollectionOption = Partial<Collection> & { id?: string };
 
 const fixTemplate = [
@@ -55,8 +58,70 @@ export default function CreatePanel({
 }: CreatePanelProps) {
   const [isCreatingCollection, setIsCreatingCollection] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const collectionInputRef = useRef<HTMLInputElement>(null);
   const contentInputRef = useRef<HTMLTextAreaElement>(null);
+
+  const importMarkdown = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file || isImporting) return;
+
+    setImportError("");
+    if (!/\.md$/i.test(file.name)) {
+      setImportError("Choose a .md Markdown file.");
+      return;
+    }
+    if (file.size > maxNoteRequestBytes) {
+      setImportError("This file exceeds the 1 MiB note request limit.");
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const markdown = new TextDecoder("utf-8", { fatal: true }).decode(
+        await file.arrayBuffer(),
+      );
+      if (!input.isConnected) return;
+      if (!markdown.trim()) {
+        setImportError("This Markdown file is empty.");
+        return;
+      }
+      if (markdown.includes("\0")) {
+        setImportError("Choose a UTF-8 Markdown text file.");
+        return;
+      }
+
+      const importedTitle =
+        file.name.slice(0, -3).replace(/\s+/g, " ").trim().slice(0, 200) ||
+        "Untitled note";
+      const payload = new TextEncoder().encode(
+        JSON.stringify({
+          title: importedTitle,
+          content: markdown.trim(),
+          tags: [],
+        }),
+      );
+      if (payload.byteLength > maxNoteRequestBytes) {
+        setImportError("This file exceeds the 1 MiB note request limit.");
+        return;
+      }
+
+      setIsPreviewing(false);
+      setTitle(importedTitle);
+      setContent(markdown);
+      window.requestAnimationFrame(() => titleInputRef.current?.focus());
+    } catch {
+      if (input.isConnected)
+        setImportError("Could not read this file as UTF-8 Markdown.");
+    } finally {
+      if (input.isConnected) setIsImporting(false);
+    }
+  };
 
   const applyFixTemplate = () => {
     setIsPreviewing(false);
@@ -126,16 +191,43 @@ export default function CreatePanel({
 
       <form
         onSubmit={(event) => {
+          if (isImporting) {
+            event.preventDefault();
+            return;
+          }
           setIsPreviewing(false);
           onSubmit(event);
         }}
         className="create-form"
       >
+        {!isEditing && !title && !content && (
+          <div className="markdown-import">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".md"
+              hidden
+              onChange={(event) => void importMarkdown(event)}
+            />
+            <button
+              type="button"
+              className="secondary-btn"
+              disabled={isImporting || isSaving}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {isImporting ? "Reading file…" : "Import Markdown"}
+            </button>
+            {importError && <p role="alert">{importError}</p>}
+          </div>
+        )}
+
         {/* Title */}
         <label className="form-field form-field-title">
           <span>Title</span>
           <input
             id="note-title"
+            ref={titleInputRef}
+            readOnly={isImporting}
             type="text"
             placeholder="Understanding idempotency…"
             value={title}
@@ -232,7 +324,7 @@ export default function CreatePanel({
             type="button"
             className="text-btn"
             onClick={applyFixTemplate}
-            disabled={isSaving}
+            disabled={isSaving || isImporting}
           >
             Use Save a fix template
           </button>
@@ -267,6 +359,7 @@ export default function CreatePanel({
           </div>
           <textarea
             id="note-content"
+            readOnly={isImporting}
             ref={contentInputRef}
             placeholder="Write the idea, fix, snippet, or reference you want to remember…"
             value={content}
@@ -305,7 +398,7 @@ export default function CreatePanel({
             <button
               type="submit"
               className="primary-btn save-btn"
-              disabled={isSaving || isCreatingCollection}
+              disabled={isSaving || isCreatingCollection || isImporting}
             >
               {isSaving ? "Saving…" : submitLabel}
             </button>
