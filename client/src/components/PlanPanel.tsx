@@ -9,6 +9,7 @@ type Checkout = {
 
 type Subscription = {
   plan: "free" | "pro";
+  entitlements?: { bulkMarkdownImport?: boolean };
   usage: {
     semanticSearchRequests: number;
     noteEmbeddingRequests: number;
@@ -61,9 +62,11 @@ function UsageSummary({ subscription }: { subscription: Subscription }) {
 export default function PlanPanel({
   apiRequest,
   checkoutEnabled,
+  onBulkImportAccessChange,
 }: {
   apiRequest: <T>(endpoint: string, options?: RequestInit) => Promise<T>;
   checkoutEnabled: boolean;
+  onBulkImportAccessChange: (allowed: boolean) => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -90,6 +93,7 @@ export default function PlanPanel({
         throw new Error("Unexpected subscription response.");
       }
       setSubscription(next);
+      onBulkImportAccessChange(next.entitlements?.bulkMarkdownImport === true);
     } catch {
       setSubscription(null);
       setSubscriptionError(true);

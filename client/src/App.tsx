@@ -12,6 +12,7 @@ import CreatePanel from "./components/CreatePanel";
 import Notification from "./components/Notification";
 import ConfirmModal from "./components/ConfirmModal";
 import PlanPanel from "./components/PlanPanel";
+import BulkImportPanel from "./features/bulk-import/BulkImportPanel";
 import SearchBar from "./components/SearchBar";
 
 const mockCheckoutEnabled = import.meta.env.VITE_ENABLE_MOCK_BILLING === "true";
@@ -73,6 +74,10 @@ function App() {
   // --- Auth ---
   const [token, setToken] = useState(localStorage.getItem("token"));
   const [user, setUser] = useState<User | null>(null);
+  const [bulkImportAccess, setBulkImportAccess] = useState<{
+    token: string;
+    allowed: boolean;
+  } | null>(null);
 
   // --- Data ---
   const [notes, setNotes] = useState<Note[]>([]);
@@ -248,6 +253,7 @@ function App() {
   };
 
   const handleLogout = () => {
+    setBulkImportAccess(null);
     noteRequestRef.current++;
     resetEditor();
     setShowMobileDetail(false);
@@ -738,6 +744,31 @@ function App() {
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [token, selectedTagFilter, selectedCollectionFilter]);
 
+  useEffect(() => {
+    if (!token) return;
+    const request = new AbortController();
+    void apiRequest<{ entitlements?: { bulkMarkdownImport?: boolean } }>(
+      "/subscription",
+      { signal: request.signal },
+    ).then(
+      (subscription) => {
+        if (request.signal.aborted) return;
+        setBulkImportAccess((current) =>
+          current?.token === token
+            ? current
+            : {
+                token,
+                allowed:
+                  subscription?.entitlements?.bulkMarkdownImport === true,
+              },
+        );
+      },
+      () => {},
+    );
+    return () => request.abort();
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
   // --- Auth screen ---
   if (!token) {
     return (
@@ -767,11 +798,23 @@ function App() {
 
       <TopBar
         accountControl={
-          <PlanPanel
-            key={token}
-            apiRequest={apiRequest}
-            checkoutEnabled={mockCheckoutEnabled}
-          />
+          <>
+            <PlanPanel
+              key={token}
+              apiRequest={apiRequest}
+              checkoutEnabled={mockCheckoutEnabled}
+              onBulkImportAccessChange={(allowed) =>
+                setBulkImportAccess({ token, allowed })
+              }
+            />
+            {bulkImportAccess?.token === token && bulkImportAccess.allowed && (
+              <BulkImportPanel
+                key={token + "-import"}
+                apiRequest={apiRequest}
+                onSaved={() => void fetchNotes()}
+              />
+            )}
+          </>
         }
         onExportNotes={exportNotes}
         isExportingNotes={isExportingNotes}
