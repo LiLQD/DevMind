@@ -32,8 +32,10 @@ export const env = {
   PORT: process.env.PORT || 8080,
   NODE_ENV: nodeEnv,
   MOCK_BILLING_ENABLED:
-    process.env.NODE_ENV === "development" &&
-    process.env.ENABLE_MOCK_BILLING === "true",
+    (process.env.NODE_ENV === "development" &&
+      process.env.ENABLE_MOCK_BILLING === "true") ||
+    (process.env.NODE_ENV === "production" &&
+      process.env.ENABLE_PRODUCTION_MOCK_BILLING === "true"),
   ...required,
   CORS_ORIGINS:
     configuredOrigins ||

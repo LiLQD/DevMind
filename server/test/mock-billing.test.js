@@ -8,15 +8,15 @@ const uri = process.env.MOCK_BILLING_TEST_MONGODB_URI;
 const moduleUrl = (path) => new URL(`../src/${path}`, import.meta.url).href;
 
 test(
-  "mock billing lifecycle with MongoDB",
+  "opt-in production mock billing lifecycle with MongoDB",
   {
     skip: uri
       ? false
       : "Set MOCK_BILLING_TEST_MONGODB_URI to use disposable MongoDB",
   },
   async (t) => {
-    process.env.NODE_ENV = "development";
-    process.env.ENABLE_MOCK_BILLING = "true";
+    process.env.NODE_ENV = "production";
+    process.env.ENABLE_PRODUCTION_MOCK_BILLING = "true";
     process.env.MONGODB_URI = uri;
     process.env.REDIS_URL = "redis://mock-billing-test";
     process.env.JWT_SECRET = "mock-billing-test-secret";
