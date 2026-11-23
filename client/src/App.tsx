@@ -11,7 +11,7 @@ import NoteView from "./components/NoteView";
 import CreatePanel from "./components/CreatePanel";
 import Notification from "./components/Notification";
 import ConfirmModal from "./components/ConfirmModal";
-import MockCheckoutPanel from "./components/MockCheckoutPanel";
+import PlanPanel from "./components/PlanPanel";
 import SearchBar from "./components/SearchBar";
 
 const mockCheckoutEnabled = import.meta.env.VITE_ENABLE_MOCK_BILLING === "true";
@@ -679,8 +679,7 @@ function App() {
         !token ||
         deleteTarget ||
         discardAction ||
-        (mockCheckoutEnabled &&
-          document.querySelector(".mock-checkout-dialog[open]"))
+        document.querySelector(".plan-dialog[open]")
       )
         return;
       const mod = e.ctrlKey || e.metaKey;
@@ -768,9 +767,11 @@ function App() {
 
       <TopBar
         accountControl={
-          mockCheckoutEnabled ? (
-            <MockCheckoutPanel key={token} apiRequest={apiRequest} />
-          ) : undefined
+          <PlanPanel
+            key={token}
+            apiRequest={apiRequest}
+            checkoutEnabled={mockCheckoutEnabled}
+          />
         }
         onExportNotes={exportNotes}
         isExportingNotes={isExportingNotes}
