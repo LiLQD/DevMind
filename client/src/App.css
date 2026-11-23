@@ -994,8 +994,20 @@ button:disabled {
   margin-block-start: var(--space-6);
 }
 
+.markdown-import p {
+  margin-block-start: var(--space-2);
+  color: var(--danger);
+  font-size: var(--font-meta);
+}
+
 .create-form
-  > :is(.form-field-title, .form-field-content, .create-footer, .text-btn) {
+  > :is(
+    .form-field-title,
+    .form-field-content,
+    .create-footer,
+    .text-btn,
+    .markdown-import
+  ) {
   grid-column: 1 / -1;
   min-width: 0;
 }
