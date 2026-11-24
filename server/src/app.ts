@@ -25,6 +25,10 @@ export function createApp() {
 
   // Middleware
   app.use(helmet());
+  app.use("/api", (_req, res, next) => {
+    res.set("Cache-Control", "no-store");
+    next();
+  });
   if (!env.MOCK_BILLING_ENABLED) app.use("/api/mock-billing", notFound);
   app.use(
     cors({

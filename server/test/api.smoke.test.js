@@ -775,6 +775,7 @@ test("server API smoke flow", async () => {
 
   assert.equal(registerResponse.body.user.email, "smoke@example.com");
   assert.ok(registerResponse.body.token);
+  assert.equal(registerResponse.headers["cache-control"], "no-store");
 
   const loginResponse = await request(app)
     .post("/api/auth/login")
@@ -783,6 +784,7 @@ test("server API smoke flow", async () => {
 
   const token = loginResponse.body.token;
   assert.ok(token);
+  assert.equal(loginResponse.headers["cache-control"], "no-store");
 
   const collectionResponse = await request(app)
     .post("/api/collections")
@@ -812,6 +814,7 @@ test("server API smoke flow", async () => {
 
   assert.equal(listResponse.body.length, 1);
   assert.equal(listResponse.body[0]._id, noteResponse.body._id);
+  assert.equal(listResponse.headers["cache-control"], "no-store");
 
   await request(app)
     .delete(`/api/notes/${noteResponse.body._id}`)
@@ -834,6 +837,10 @@ test("serves security headers and rejects unknown CORS origins", async () => {
 
   assert.equal(response.headers["x-content-type-options"], "nosniff");
   assert.equal(response.headers["access-control-allow-origin"], undefined);
+  await request(app)
+    .get("/api/notes")
+    .expect(401)
+    .expect("Cache-Control", "no-store");
 });
 
 test("reports dependency readiness separately from liveness", async () => {

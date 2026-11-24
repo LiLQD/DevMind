@@ -106,16 +106,17 @@ In another terminal:
 ```bash
 cd client
 pnpm install
-cp .env.example .env
 ```
 
-Set `VITE_API_URL` to the backend API URL, then run:
+Run the Vite dev server:
 
 ```bash
 pnpm run dev
 ```
 
-The frontend starts on `http://localhost:5173`.
+The frontend starts on `http://localhost:5173` and proxies `/api` to the
+local backend. Set `DEVMIND_DEV_API_ORIGIN` if the backend listens on another
+origin. An explicit `VITE_API_URL` still overrides the browser API base.
 
 ### Mock checkout
 
@@ -182,6 +183,12 @@ DevMind is designed to be deployed easily using Railway and Vercel.
 
 Both platforms support automatic deployments when changes are pushed to
 `main`.
+
+To test same-origin API routing in an isolated preview, set
+`VERCEL_API_ORIGIN` to the staging Render HTTPS origin without an `/api`
+suffix and set `VITE_API_URL=/api`, then redeploy. Verify rate-limit
+identity, forwarded headers, caching, proxy failures, and Markdown import
+and export before enabling the rewrite in production.
 
 ## 📡 API Overview
 
