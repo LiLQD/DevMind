@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { Collection, Note, SearchMode } from "./types";
 import "./App.css";
@@ -14,6 +14,17 @@ import ConfirmModal from "./components/ConfirmModal";
 import PlanPanel from "./components/PlanPanel";
 import BulkImportPanel from "./features/bulk-import/BulkImportPanel";
 import SearchBar from "./components/SearchBar";
+import {
+  authenticateCookieSession,
+  CookieAuthError,
+  cookieAuthEnabled,
+  cookieSessionChannel,
+  cookieWorkspaceRequest,
+  logoutCookieSession,
+  needsCookieSignIn,
+  restoreCookieSession,
+} from "./features/auth/cookie-session";
+import type { CookieSession } from "./features/auth/cookie-session";
 
 const mockCheckoutEnabled = import.meta.env.VITE_ENABLE_MOCK_BILLING === "true";
 const API_BASE =
@@ -88,17 +99,25 @@ function authResponseError(status: number, message: string, isLogin: boolean) {
 
 function App() {
   // --- Auth ---
-  const [{ token, requests }, setSession] = useState(() => ({
-    token: localStorage.getItem("token"),
+  const [{ token, cookie, requests }, setSession] = useState(() => ({
+    token: cookieAuthEnabled ? null : localStorage.getItem("token"),
+    cookie: null as CookieSession | null,
     requests: new AbortController(),
   }));
+  const sessionKey = cookie?.sessionId ?? token;
   const sessionSignal = requests.signal;
   const [user, setUser] = useState<User | null>(null);
+  const [cookieAction, setCookieAction] = useState<
+    "restoring" | "restore-error" | "signing-out" | "logout-error" | null
+  >(cookieAuthEnabled ? "restoring" : null);
+  const cookieChannelRef = useRef<BroadcastChannel | null>(null);
+  const logoutTargetRef = useRef<CookieSession | null>(null);
+  const draftOwnerRef = useRef<string | null>(null);
   const [authError, setAuthError] = useState("");
   const [isAuthPending, setIsAuthPending] = useState(false);
   const authPendingRef = useRef(false);
   const [bulkImportAccess, setBulkImportAccess] = useState<{
-    token: string;
+    sessionKey: string;
     allowed: boolean;
   } | null>(null);
 
@@ -238,6 +257,31 @@ function App() {
         ? AbortSignal.any([sessionSignal, options.signal])
         : sessionSignal
       : options.signal;
+    if (cookie) {
+      try {
+        const data = await cookieWorkspaceRequest(
+          cookie,
+          sessionSignal,
+          endpoint,
+          {
+            ...options,
+            headers,
+            signal,
+          },
+        );
+        sessionSignal.throwIfAborted();
+        return data as T;
+      } catch (error) {
+        if (!sessionSignal.aborted && needsCookieSignIn(error)) {
+          clearWorkspace(cookie.user.id);
+          setIsLogin(true);
+          setAuthError(
+            "Sign in to continue. Unsaved edits can be restored for the same account.",
+          );
+        }
+        throw error;
+      }
+    }
     const res = await fetch(`${API_BASE}${endpoint}`, {
       ...options,
       headers,
@@ -277,6 +321,19 @@ function App() {
     try {
       const endpoint = isLogin ? "/auth/login" : "/auth/register";
       const payload = isLogin ? { email, password } : { email, password, name };
+      if (cookieAuthEnabled) {
+        const current = await authenticateCookieSession(endpoint, payload);
+        adoptCookieSession(current);
+        cookieChannelRef.current?.postMessage("session-changed");
+        setEmail("");
+        setPassword("");
+        setName("");
+        showNotification(
+          isLogin ? "Welcome back." : "Account created.",
+          "success",
+        );
+        return;
+      }
       const response = await fetch(`${API_BASE}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -312,7 +369,11 @@ function App() {
         return;
       }
       localStorage.setItem("token", data.token);
-      setSession({ token: data.token, requests: new AbortController() });
+      setSession({
+        token: data.token,
+        cookie: null,
+        requests: new AbortController(),
+      });
       setUser(data.user ?? null);
       setEmail("");
       setPassword("");
@@ -321,19 +382,32 @@ function App() {
         isLogin ? "Welcome back." : "Account created.",
         "success",
       );
-    } catch {
-      setAuthError(authResponseError(500, "", isLogin));
+    } catch (error) {
+      if (
+        error instanceof CookieAuthError &&
+        [400, 401, 429].includes(error.status) &&
+        !error.code
+      ) {
+        setAuthError(authResponseError(error.status, error.message, isLogin));
+      } else {
+        setAuthError(
+          error instanceof CookieAuthError
+            ? error.message
+            : authResponseError(500, "", isLogin),
+        );
+      }
     } finally {
       authPendingRef.current = false;
       setIsAuthPending(false);
     }
   };
 
-  const handleLogout = () => {
+  const clearWorkspace = (preserveDraftFor?: string) => {
     requests.abort();
     setBulkImportAccess(null);
     noteRequestRef.current++;
-    resetEditor();
+    draftOwnerRef.current = preserveDraftFor ?? null;
+    if (!preserveDraftFor) resetEditor();
     setShowMobileDetail(false);
     setIsLoadingNote(false);
     setIsLoadingRelated(false);
@@ -341,8 +415,7 @@ function App() {
     exportRequestRef.current?.abort();
     exportRequestRef.current = null;
     setIsExportingNotes(false);
-    localStorage.removeItem("token");
-    setSession({ token: null, requests: new AbortController() });
+    setSession({ token: null, cookie: null, requests: new AbortController() });
     setUser(null);
     if (notificationTimerRef.current)
       clearTimeout(notificationTimerRef.current);
@@ -352,6 +425,7 @@ function App() {
     setIsCreatingNote(false);
     setIsUpdatingNote(false);
     setDeleteTarget(null);
+    setDiscardAction(null);
     setDeletingNoteId(null);
     setSelectedNote(null);
     setRelatedNotes([]);
@@ -365,8 +439,92 @@ function App() {
     setSelectedCollectionFilter(null);
   };
 
+  const adoptCookieSession = (current: CookieSession) => {
+    if (draftOwnerRef.current === current.user.id) {
+      if (editor) setShowMobileDetail(true);
+    } else {
+      resetEditor();
+    }
+    draftOwnerRef.current = null;
+    setAuthError("");
+    setSession({
+      token: null,
+      cookie: current,
+      requests: new AbortController(),
+    });
+    setUser(current.user);
+  };
+
+  const restoreSession = async (signal: AbortSignal) => {
+    try {
+      const current = await restoreCookieSession(signal);
+      if (signal.aborted) return;
+      adoptCookieSession(current);
+      setCookieAction(null);
+    } catch (error) {
+      if (!signal.aborted) {
+        setCookieAction(needsCookieSignIn(error) ? null : "restore-error");
+      }
+    }
+  };
+
+  const finishCookieLogout = async () => {
+    const target = logoutTargetRef.current;
+    if (!target) return;
+    setCookieAction("signing-out");
+    try {
+      await logoutCookieSession(target);
+    } catch (error) {
+      if (!needsCookieSignIn(error)) {
+        setCookieAction("logout-error");
+        return;
+      }
+    }
+    logoutTargetRef.current = null;
+    setCookieAction(null);
+  };
+
+  const handleLogout = () => {
+    clearWorkspace();
+    localStorage.removeItem("token");
+    if (cookie) {
+      setIsLogin(true);
+      logoutTargetRef.current = cookie;
+      cookieChannelRef.current?.postMessage("session-changed");
+      void finishCookieLogout();
+    }
+  };
+
+  const onCookieChange = useEffectEvent(() => {
+    if (!cookie) return;
+    clearWorkspace(cookie.user.id);
+    setIsLogin(true);
+    setAuthError("The session changed in another tab. Sign in to continue.");
+  });
+
+  useEffect(() => {
+    if (!cookieAuthEnabled) return;
+    localStorage.removeItem("token");
+    const request = new AbortController();
+    void restoreSession(request.signal);
+    if (typeof BroadcastChannel !== "undefined") {
+      const channel = new BroadcastChannel(cookieSessionChannel);
+      channel.onmessage = (event) => {
+        if (event.data === "session-changed") onCookieChange();
+      };
+      cookieChannelRef.current = channel;
+    }
+    return () => {
+      request.abort();
+      cookieChannelRef.current?.close();
+      cookieChannelRef.current = null;
+    };
+    // The startup probe runs only when the app mounts.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const exportNotes = async () => {
-    if (!token || exportRequestRef.current) return;
+    if (!sessionKey || exportRequestRef.current) return;
 
     const request = new AbortController();
     exportRequestRef.current = request;
@@ -413,7 +571,7 @@ function App() {
 
   // --- Data fetching ---
   const fetchNotes = async () => {
-    if (!token || sessionSignal.aborted) return;
+    if (!sessionKey || sessionSignal.aborted) return;
     setIsLoadingNotes(true);
     try {
       let url = "/notes";
@@ -434,7 +592,7 @@ function App() {
   };
 
   const fetchCollections = async () => {
-    if (!token) return;
+    if (!sessionKey) return;
     try {
       const data = await apiRequest<Collection[] | { data?: Collection[] }>(
         "/collections",
@@ -774,7 +932,7 @@ function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
-        !token ||
+        !sessionKey ||
         deleteTarget ||
         discardAction ||
         document.querySelector(".plan-dialog[open]")
@@ -828,16 +986,16 @@ function App() {
 
   // --- Effects ---
   useEffect(() => {
-    if (token) {
+    if (sessionKey) {
       // oxlint-disable-next-line react/set-state-in-effect
       fetchNotes();
       fetchCollections();
     }
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, selectedTagFilter, selectedCollectionFilter]);
+  }, [sessionKey, selectedTagFilter, selectedCollectionFilter]);
 
   useEffect(() => {
-    if (!token) return;
+    if (!sessionKey) return;
     const request = new AbortController();
     void apiRequest<{ entitlements?: { bulkMarkdownImport?: boolean } }>(
       "/subscription",
@@ -846,10 +1004,10 @@ function App() {
       (subscription) => {
         if (request.signal.aborted || sessionSignal.aborted) return;
         setBulkImportAccess((current) =>
-          current?.token === token
+          current?.sessionKey === sessionKey
             ? current
             : {
-                token,
+                sessionKey,
                 allowed:
                   subscription?.entitlements?.bulkMarkdownImport === true,
               },
@@ -859,10 +1017,49 @@ function App() {
     );
     return () => request.abort();
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [sessionKey]);
 
   // --- Auth screen ---
-  if (!token) {
+  if (cookieAction) {
+    const signingOut =
+      cookieAction === "signing-out" || cookieAction === "logout-error";
+    const failed =
+      cookieAction === "restore-error" || cookieAction === "logout-error";
+    return (
+      <main className="auth-page">
+        <div className="auth-box">
+          <h1>DevMind</h1>
+          {failed ? (
+            <div className="auth-form">
+              <p role="alert">
+                {signingOut
+                  ? "Could not confirm sign-out."
+                  : "Could not restore your session."}
+              </p>
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => {
+                  if (signingOut) void finishCookieLogout();
+                  else {
+                    setCookieAction("restoring");
+                    void restoreSession(new AbortController().signal);
+                  }
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <p role="status">
+              {signingOut ? "Signing out…" : "Restoring session…"}
+            </p>
+          )}
+        </div>
+      </main>
+    );
+  }
+  if (!sessionKey) {
     return (
       <AuthPage
         isLogin={isLogin}
@@ -899,21 +1096,22 @@ function App() {
         accountControl={
           <>
             <PlanPanel
-              key={token}
+              key={sessionKey}
               apiRequest={apiRequest}
               checkoutEnabled={mockCheckoutEnabled}
               onBulkImportAccessChange={(allowed) => {
                 if (!sessionSignal.aborted)
-                  setBulkImportAccess({ token, allowed });
+                  setBulkImportAccess({ sessionKey, allowed });
               }}
             />
-            {bulkImportAccess?.token === token && bulkImportAccess.allowed && (
-              <BulkImportPanel
-                key={token + "-import"}
-                apiRequest={apiRequest}
-                onSaved={() => void fetchNotes()}
-              />
-            )}
+            {bulkImportAccess?.sessionKey === sessionKey &&
+              bulkImportAccess.allowed && (
+                <BulkImportPanel
+                  key={sessionKey + "-import"}
+                  apiRequest={apiRequest}
+                  onSaved={() => void fetchNotes()}
+                />
+              )}
           </>
         }
         onExportNotes={exportNotes}

@@ -64,7 +64,11 @@ export const discoverCookieSession: RequestHandler = async (req, res) => {
     if (!req.authSessionId || !refresh?.sessionId.equals(req.authSessionId)) {
       return authFailure(res, "AUTH_REQUIRED");
     }
-    return res.json({ user: req.user, refreshGeneration: refresh.generation });
+    return res.json({
+      user: req.user,
+      sessionId: refresh.sessionId,
+      refreshGeneration: refresh.generation,
+    });
   } catch {
     return sessionUnavailable(res);
   }

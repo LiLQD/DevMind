@@ -14,6 +14,7 @@ import {
 const authErrors = {
   AUTH_REQUIRED: [401, "Sign in to continue."],
   ACCESS_EXPIRED: [401, "The access session expired."],
+  SESSION_CHANGED: [401, "The browser session changed."],
   CSRF_REJECTED: [403, "The request could not be verified."],
   REFRESH_CONFLICT: [409, "The session changed. Check its current state."],
   SESSION_UNAVAILABLE: [503, "Authentication is temporarily unavailable."],
@@ -62,12 +63,23 @@ export const requireCredentialProof: RequestHandler = (req, res, next) => {
 export const protectCookie: RequestHandler = async (req, res, next) => {
   try {
     const access = readAccessCookie(req);
+    const expectedSession = req.get("X-DevMind-Session");
     if (access.status !== "valid") {
       const refresh =
         access.status === "invalid"
           ? null
           : await getRefreshSession(readRefreshCookie(req));
+      if (
+        expectedSession &&
+        refresh &&
+        !refresh.sessionId.equals(expectedSession)
+      ) {
+        return authFailure(res, "SESSION_CHANGED");
+      }
       return authFailure(res, refresh ? "ACCESS_EXPIRED" : "AUTH_REQUIRED");
+    }
+    if (expectedSession && !access.sessionId.equals(expectedSession)) {
+      return authFailure(res, "SESSION_CHANGED");
     }
     const account = await getSessionAccount(access.accountId, access.sessionId);
     if (!account) return authFailure(res, "AUTH_REQUIRED");
