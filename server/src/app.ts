@@ -4,6 +4,8 @@ import cors from "cors";
 import helmet from "helmet";
 import mongoose from "mongoose";
 import { env } from "./config/env.ts";
+import { cookieAuth } from "./config/cookie-auth.ts";
+import { requireCookieOrigin } from "./middleware/cookie-auth.middleware.ts";
 
 import authRoutes from "./routes/auth.routes.ts";
 import noteRoutes from "./routes/notes.routes.ts";
@@ -30,18 +32,22 @@ export function createApp() {
     next();
   });
   if (!env.MOCK_BILLING_ENABLED) app.use("/api/mock-billing", notFound);
-  app.use(
-    cors({
-      origin: (origin, callback) => {
-        callback(null, !origin || env.CORS_ORIGINS.includes(origin));
-      },
-    }),
-  );
+  if (cookieAuth) {
+    app.use("/api", requireCookieOrigin);
+  } else {
+    app.use(
+      cors({
+        origin: (origin, callback) => {
+          callback(null, !origin || env.CORS_ORIGINS.includes(origin));
+        },
+      }),
+    );
+  }
   app.use(express.json({ limit: "1mb" }));
 
   // Logging
   app.use((req, res, next) => {
-    console.log(`${req.method} ${req.url}`);
+    console.log(cookieAuth ? req.method : `${req.method} ${req.url}`);
     next();
   });
 
@@ -120,18 +126,37 @@ export function createApp() {
         status?: unknown;
         code?: unknown;
         message?: unknown;
+        type?: unknown;
       },
       _req: Request,
       res: Response,
-      _next: NextFunction,
+      next: NextFunction,
     ) => {
-      console.error("Error:", err);
+      if (res.headersSent) return next(err);
       const status = isInteger(err.statusCode)
         ? err.statusCode
         : isInteger(err.status)
           ? err.status
           : 500;
       const isServerError = status >= 500;
+
+      if (
+        cookieAuth &&
+        (err.type === "entity.parse.failed" || err.type === "entity.too.large")
+      ) {
+        const tooLarge = err.type === "entity.too.large";
+        return res.status(tooLarge ? 413 : 400).json({
+          success: false,
+          error: {
+            code: tooLarge ? "REQUEST_TOO_LARGE" : "INVALID_JSON",
+            message: tooLarge
+              ? "Request body is too large."
+              : "Invalid JSON request body.",
+          },
+        });
+      }
+      if (!cookieAuth) console.error("Error:", err);
+      else if (isServerError) console.error("Cookie-mode API request failed.");
 
       res.status(status).json({
         success: false,
@@ -153,12 +178,14 @@ export function createApp() {
 export default createApp();
 
 function notFound(req: Request, res: Response) {
-  console.log(`404: ${req.method} ${req.originalUrl}`);
+  if (!cookieAuth) console.log(`404: ${req.method} ${req.originalUrl}`);
   res.status(404).json({
     success: false,
     error: {
       code: "NOT_FOUND",
-      message: `Không tìm thấy endpoint ${req.method} ${req.originalUrl}`,
+      message: cookieAuth
+        ? "Endpoint not found."
+        : `Không tìm thấy endpoint ${req.method} ${req.originalUrl}`,
     },
   });
 }
