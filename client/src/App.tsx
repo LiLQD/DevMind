@@ -86,7 +86,11 @@ function authResponseError(status: number, message: string, isLogin: boolean) {
 
 function App() {
   // --- Auth ---
-  const [token, setToken] = useState(localStorage.getItem("token"));
+  const [{ token, requests }, setSession] = useState(() => ({
+    token: localStorage.getItem("token"),
+    requests: new AbortController(),
+  }));
+  const sessionSignal = requests.signal;
   const [user, setUser] = useState<User | null>(null);
   const [authError, setAuthError] = useState("");
   const [isAuthPending, setIsAuthPending] = useState(false);
@@ -191,6 +195,7 @@ function App() {
     message: string,
     type: NotificationState["type"] = "info",
   ) => {
+    if (sessionSignal.aborted) return;
     setNotification({ message, type });
     if (notificationTimerRef.current)
       clearTimeout(notificationTimerRef.current);
@@ -218,18 +223,31 @@ function App() {
     endpoint: string,
     options: RequestInit = {},
   ): Promise<T> => {
+    sessionSignal.throwIfAborted();
     const headers = {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     };
-    const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+    // Cancel reads on sign-out and discard late write responses without aborting writes.
+    const isRead = !options.method || options.method === "GET";
+    const signal = isRead
+      ? options.signal
+        ? AbortSignal.any([sessionSignal, options.signal])
+        : sessionSignal
+      : options.signal;
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers,
+      signal,
+    });
     let data: unknown = {};
     try {
       data = await res.json();
     } catch {
       /* body không phải JSON */
     }
+    sessionSignal.throwIfAborted();
     if (!res.ok) {
       const body = data as {
         message?: string;
@@ -292,7 +310,7 @@ function App() {
         return;
       }
       localStorage.setItem("token", data.token);
-      setToken(data.token);
+      setSession({ token: data.token, requests: new AbortController() });
       setUser(data.user ?? null);
       setEmail("");
       setPassword("");
@@ -310,6 +328,7 @@ function App() {
   };
 
   const handleLogout = () => {
+    requests.abort();
     setBulkImportAccess(null);
     noteRequestRef.current++;
     resetEditor();
@@ -321,15 +340,27 @@ function App() {
     exportRequestRef.current = null;
     setIsExportingNotes(false);
     localStorage.removeItem("token");
-    setToken(null);
+    setSession({ token: null, requests: new AbortController() });
     setUser(null);
+    if (notificationTimerRef.current)
+      clearTimeout(notificationTimerRef.current);
+    setNotification(null);
     setNotes([]);
+    setIsLoadingNotes(false);
+    setIsCreatingNote(false);
+    setIsUpdatingNote(false);
+    setDeleteTarget(null);
+    setDeletingNoteId(null);
     setSelectedNote(null);
     setRelatedNotes([]);
     setSearchResults([]);
     setIsSearching(false);
+    setIsSearchingAI(false);
+    setSearchMode("semantic");
+    setExactSearchQuery("");
     setQuery("");
     setCollections([]);
+    setSelectedCollectionFilter(null);
   };
 
   const exportNotes = async () => {
@@ -380,7 +411,7 @@ function App() {
 
   // --- Data fetching ---
   const fetchNotes = async () => {
-    if (!token) return;
+    if (!token || sessionSignal.aborted) return;
     setIsLoadingNotes(true);
     try {
       let url = "/notes";
@@ -396,7 +427,7 @@ function App() {
     } catch {
       showNotification("Failed to load notes.", "error");
     } finally {
-      setIsLoadingNotes(false);
+      if (!sessionSignal.aborted) setIsLoadingNotes(false);
     }
   };
 
@@ -466,7 +497,7 @@ function App() {
     } catch (err) {
       showNotification(errorMessage(err), "error");
     } finally {
-      setIsCreatingNote(false);
+      if (!sessionSignal.aborted) setIsCreatingNote(false);
     }
   };
 
@@ -509,7 +540,7 @@ function App() {
     } catch (err) {
       showNotification(errorMessage(err), "error");
     } finally {
-      setIsUpdatingNote(false);
+      if (!sessionSignal.aborted) setIsUpdatingNote(false);
     }
   };
 
@@ -532,12 +563,13 @@ function App() {
       );
       setDeleteTarget(null);
       await fetchNotes();
+      if (sessionSignal.aborted) return;
       restoreFocus(dialogOpenerRef.current);
       showNotification("Note deleted.", "success");
     } catch (err) {
       showNotification(errorMessage(err), "error");
     } finally {
-      setDeletingNoteId(null);
+      if (!sessionSignal.aborted) setDeletingNoteId(null);
     }
   };
 
@@ -581,6 +613,7 @@ function App() {
         data?: Note[];
       }>("/notes/search", {
         method: "POST",
+        signal: sessionSignal,
         body: JSON.stringify({ query: submittedQuery, mode: searchMode }),
       });
       const results = data.results || data.data || [];
@@ -598,7 +631,7 @@ function App() {
         "error",
       );
     } finally {
-      setIsSearchingAI(false);
+      if (!sessionSignal.aborted) setIsSearchingAI(false);
     }
   };
 
@@ -809,7 +842,7 @@ function App() {
       { signal: request.signal },
     ).then(
       (subscription) => {
-        if (request.signal.aborted) return;
+        if (request.signal.aborted || sessionSignal.aborted) return;
         setBulkImportAccess((current) =>
           current?.token === token
             ? current
@@ -867,9 +900,10 @@ function App() {
               key={token}
               apiRequest={apiRequest}
               checkoutEnabled={mockCheckoutEnabled}
-              onBulkImportAccessChange={(allowed) =>
-                setBulkImportAccess({ token, allowed })
-              }
+              onBulkImportAccessChange={(allowed) => {
+                if (!sessionSignal.aborted)
+                  setBulkImportAccess({ token, allowed });
+              }}
             />
             {bulkImportAccess?.token === token && bulkImportAccess.allowed && (
               <BulkImportPanel
