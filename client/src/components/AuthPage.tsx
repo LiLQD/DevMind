@@ -1,8 +1,11 @@
-import type { Dispatch, FormEventHandler, SetStateAction } from "react";
+import type { FormEventHandler } from "react";
 
 type AuthPageProps = {
   isLogin: boolean;
-  setIsLogin: Dispatch<SetStateAction<boolean>>;
+  onSwitchMode: () => void;
+  error: string;
+  isPending: boolean;
+  onEdit: () => void;
   email: string;
   setEmail: (email: string) => void;
   password: string;
@@ -14,7 +17,10 @@ type AuthPageProps = {
 
 export default function AuthPage({
   isLogin,
-  setIsLogin,
+  onSwitchMode,
+  error,
+  isPending,
+  onEdit,
   email,
   setEmail,
   password,
@@ -23,6 +29,8 @@ export default function AuthPage({
   setName,
   onSubmit,
 }: AuthPageProps) {
+  const pendingLabel = isLogin ? "Signing in…" : "Creating account…";
+
   return (
     <div className="auth-page">
       <div className="auth-box">
@@ -30,7 +38,7 @@ export default function AuthPage({
           <h1>DevMind</h1>
           <p>Your second brain for developers</p>
         </div>
-        <form onSubmit={onSubmit} className="auth-form">
+        <form onSubmit={onSubmit} onChange={onEdit} className="auth-form">
           <div>
             <h2>{isLogin ? "Sign in" : "Create account"}</h2>
             <p className="auth-note">
@@ -47,6 +55,7 @@ export default function AuthPage({
                 placeholder="Your name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                readOnly={isPending}
                 required
               />
             </label>
@@ -58,6 +67,7 @@ export default function AuthPage({
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              readOnly={isPending}
               required
             />
           </label>
@@ -68,16 +78,30 @@ export default function AuthPage({
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              readOnly={isPending}
               required
             />
           </label>
-          <button type="submit" className="primary-btn">
-            {isLogin ? "Sign in" : "Create account"}
-          </button>
+          <div className="auth-submit">
+            <div className="auth-error" role="alert">
+              {error}
+            </div>
+            <button type="submit" className="primary-btn" disabled={isPending}>
+              {isPending
+                ? pendingLabel
+                : isLogin
+                  ? "Sign in"
+                  : "Create account"}
+            </button>
+            <span className="auth-status" role="status">
+              {isPending ? pendingLabel : ""}
+            </span>
+          </div>
           <button
             type="button"
             className="text-btn auth-switch"
-            onClick={() => setIsLogin((v) => !v)}
+            onClick={onSwitchMode}
+            disabled={isPending}
           >
             {isLogin ? "Create an account" : "Back to sign in"}
           </button>

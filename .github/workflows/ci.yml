@@ -40,7 +40,7 @@ jobs:
         run: pnpm test
 
   build-frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: client
@@ -67,6 +67,12 @@ jobs:
 
       - name: Verify build output
         run: test -d dist && echo "Build succeeded"
+
+      - name: Install Chromium for browser tests
+        run: pnpm exec playwright install --with-deps --only-shell chromium
+
+      - name: Run authentication browser tests
+        run: pnpm test
 
   lint:
     runs-on: ubuntu-latest
