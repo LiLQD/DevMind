@@ -158,7 +158,15 @@ test(
         const restored = await get(`${authPath}/session`, cookies)
           .expect(200)
           .expect("Cache-Control", "no-store");
-        assert.deepEqual(restored.body, { user, refreshGeneration: 0 });
+        assert.deepEqual(restored.body, {
+          user,
+          sessionId: signed.sid,
+          refreshGeneration: 0,
+        });
+        await get("/api/notes", cookies)
+          .set("X-DevMind-Session", new mongoose.Types.ObjectId().toString())
+          .expect(401)
+          .expect(({ body }) => assert.equal(body.code, "SESSION_CHANGED"));
         const bearer = jwt.sign({ id: user.id }, process.env.JWT_SECRET);
         await client
           .get("/api/notes")

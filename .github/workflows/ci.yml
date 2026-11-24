@@ -54,6 +54,16 @@ jobs:
 
   build-frontend:
     runs-on: ubuntu-24.04
+    services:
+      mongodb:
+        image: mongo:8
+        ports:
+          - 27017/tcp
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: client
@@ -84,7 +94,12 @@ jobs:
       - name: Install Chromium for browser tests
         run: pnpm exec playwright install --with-deps --only-shell chromium
 
+      - name: Install backend dependencies for cookie browser tests
+        run: pnpm --dir ../server install --frozen-lockfile
+
       - name: Run browser tests
+        env:
+          COOKIE_BROWSER_TEST_MONGODB_URI: mongodb://127.0.0.1:${{ job.services.mongodb.ports[27017] }}
         run: pnpm test
 
   lint:
