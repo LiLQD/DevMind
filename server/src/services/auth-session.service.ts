@@ -35,7 +35,7 @@ function liveSessionFilter(now = new Date()) {
 
 async function activeAccount(accountId: Types.ObjectId) {
   const account = await Account.findById(accountId)
-    .select("email role isActive +sessionVersion")
+    .select("email name role isActive +sessionVersion")
     .lean();
   return account && account.isActive !== false ? account : null;
 }
@@ -67,7 +67,14 @@ function credentials(
 
 type RotationResult =
   | { status: "rotated"; credentials: ReturnType<typeof credentials> }
-  | { status: "invalid" | "reused" | "conflict" | "rotation_limit" };
+  | {
+      status:
+        | "invalid"
+        | "reused"
+        | "conflict"
+        | "rotation_limit"
+        | "csrf_mismatch";
+    };
 
 export async function createAuthSession(accountId: Types.ObjectId) {
   const account = await activeAccount(accountId);
@@ -112,6 +119,7 @@ export async function getRefreshSession(refreshToken: unknown) {
 
 export async function rotateAuthSession(
   refreshToken: unknown,
+  expectedFamily?: Types.ObjectId,
 ): Promise<RotationResult> {
   const tokenHash = presentedTokenHash(refreshToken);
   if (!tokenHash) return { status: "invalid" };
@@ -122,6 +130,9 @@ export async function rotateAuthSession(
     .select("+currentTokenHash")
     .lean();
   if (!observed) return { status: "invalid" };
+  if (expectedFamily && !observed._id.equals(expectedFamily)) {
+    return { status: "csrf_mismatch" };
+  }
 
   const account = await activeAccount(observed.accountId);
   if (!account || (account.sessionVersion ?? 0) !== observed.accountVersion) {
@@ -184,7 +195,12 @@ export async function getSessionAccount(
   ) {
     return null;
   }
-  return { id: account._id, email: account.email, role: account.role };
+  return {
+    id: account._id,
+    email: account.email,
+    name: account.name,
+    role: account.role,
+  };
 }
 
 export async function revokeAuthSession(
@@ -195,6 +211,24 @@ export async function revokeAuthSession(
     { _id: sessionId, accountId, revokedAt: null },
     { $set: { revokedAt: new Date(), revocationReason: "logout" } },
   );
+}
+
+export async function revokeRefreshSession(
+  refreshToken: unknown,
+  expectedFamily: Types.ObjectId,
+) {
+  const tokenHash = presentedTokenHash(refreshToken);
+  if (!tokenHash) return false;
+  const session = await AuthSession.findOne({
+    _id: expectedFamily,
+    $or: [{ currentTokenHash: tokenHash }, { consumedTokenHashes: tokenHash }],
+  })
+    .select("accountId")
+    .lean();
+  if (!session) return false;
+  // Logout may arrive with the previously consumed token after rotation.
+  await revokeAuthSession(session.accountId, session._id);
+  return true;
 }
 
 // Password and deactivation writes should increment this version in the same
