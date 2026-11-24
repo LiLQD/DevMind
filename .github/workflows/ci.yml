@@ -68,6 +68,12 @@ jobs:
       - name: Verify build output
         run: test -d dist && echo "Build succeeded"
 
+      - name: Install Chromium for browser tests
+        run: pnpm exec playwright install --with-deps --only-shell chromium
+
+      - name: Run authentication browser tests
+        run: pnpm test
+
   lint:
     runs-on: ubuntu-latest
     steps:

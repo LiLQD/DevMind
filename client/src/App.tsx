@@ -70,10 +70,27 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Request failed";
 }
 
+function authResponseError(status: number, message: string, isLogin: boolean) {
+  if (isLogin && status === 401) return "Email or password is incorrect.";
+  if (!isLogin && status === 400 && message === "Email đã tồn tại") {
+    return "An account with this email already exists.";
+  }
+  if (status === 429) return "Too many attempts. Please try again later.";
+  if (status === 400 || status === 422) {
+    return message || "Check the information you entered and try again.";
+  }
+  return isLogin
+    ? "Unable to sign in. Please try again."
+    : "Unable to create your account. Please try again.";
+}
+
 function App() {
   // --- Auth ---
   const [token, setToken] = useState(localStorage.getItem("token"));
   const [user, setUser] = useState<User | null>(null);
+  const [authError, setAuthError] = useState("");
+  const [isAuthPending, setIsAuthPending] = useState(false);
+  const authPendingRef = useRef(false);
   const [bulkImportAccess, setBulkImportAccess] = useState<{
     token: string;
     allowed: boolean;
@@ -228,27 +245,67 @@ function App() {
   // --- Auth handlers ---
   const handleAuth = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (authPendingRef.current) return;
+    if (!isLogin && !name.trim()) {
+      setAuthError("Enter your name.");
+      return;
+    }
+
+    authPendingRef.current = true;
+    setIsAuthPending(true);
+    setAuthError("");
     try {
       const endpoint = isLogin ? "/auth/login" : "/auth/register";
       const payload = isLogin ? { email, password } : { email, password, name };
-      const data = await apiRequest<{ token?: string; user: User }>(endpoint, {
+      const response = await fetch(`${API_BASE}${endpoint}`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-      });
-      if (data.token) {
-        localStorage.setItem("token", data.token);
-        setToken(data.token);
-        setUser(data.user);
-        setEmail("");
-        setPassword("");
-        setName("");
-        showNotification(
-          isLogin ? "Welcome back." : "Account created.",
-          "success",
+      }).catch(() => {
+        setAuthError(
+          "Unable to reach DevMind. Check your connection and try again.",
         );
+        return null;
+      });
+      if (!response) return;
+
+      const data: {
+        token?: unknown;
+        user?: User;
+        message?: unknown;
+        error?: { message?: unknown };
+      } | null = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const message = data?.message ?? data?.error?.message;
+        setAuthError(
+          authResponseError(
+            response.status,
+            typeof message === "string" ? message : "",
+            isLogin,
+          ),
+        );
+        return;
       }
-    } catch (err) {
-      showNotification(errorMessage(err), "error");
+      if (typeof data?.token !== "string" || !data.token) {
+        setAuthError(authResponseError(500, "", isLogin));
+        return;
+      }
+      localStorage.setItem("token", data.token);
+      setToken(data.token);
+      setUser(data.user ?? null);
+      setEmail("");
+      setPassword("");
+      setName("");
+      showNotification(
+        isLogin ? "Welcome back." : "Account created.",
+        "success",
+      );
+    } catch {
+      setAuthError(authResponseError(500, "", isLogin));
+    } finally {
+      authPendingRef.current = false;
+      setIsAuthPending(false);
     }
   };
 
@@ -774,7 +831,14 @@ function App() {
     return (
       <AuthPage
         isLogin={isLogin}
-        setIsLogin={setIsLogin}
+        onSwitchMode={() => {
+          if (authPendingRef.current) return;
+          setAuthError("");
+          setIsLogin((value) => !value);
+        }}
+        error={authError}
+        isPending={isAuthPending}
+        onEdit={() => setAuthError("")}
         email={email}
         setEmail={setEmail}
         password={password}
