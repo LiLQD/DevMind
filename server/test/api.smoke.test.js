@@ -157,7 +157,7 @@ Note.prototype.deleteOne = async function deleteOne() {
 class Collection {
   constructor(data) {
     Object.assign(this, data, {
-      _id: String(nextId++),
+      _id: (nextId++).toString(16).padStart(24, "0"),
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -172,6 +172,12 @@ class Collection {
     return query(
       collections.find((collection) => matches(collection, filter)) || null,
     );
+  }
+
+  static async countDocuments({ userId, _id: { $in } }) {
+    return collections.filter(
+      (item) => item.userId === userId && $in.includes(item._id),
+    ).length;
   }
 }
 
