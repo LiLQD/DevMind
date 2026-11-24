@@ -16,7 +16,9 @@ import BulkImportPanel from "./features/bulk-import/BulkImportPanel";
 import SearchBar from "./components/SearchBar";
 
 const mockCheckoutEnabled = import.meta.env.VITE_ENABLE_MOCK_BILLING === "true";
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8080/api";
+const API_BASE =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV ? "/api" : "http://localhost:8080/api");
 
 type User = { name?: string; email?: string };
 type NotificationState = {
