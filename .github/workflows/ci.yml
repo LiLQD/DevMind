@@ -9,6 +9,16 @@ on:
 jobs:
   build-backend:
     runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:8
+        ports:
+          - 27017/tcp
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: server
@@ -37,6 +47,8 @@ jobs:
         run: pnpm build
 
       - name: Run backend API tests
+        env:
+          COLLECTION_OWNERSHIP_TEST_MONGODB_URI: mongodb://127.0.0.1:${{ job.services.mongodb.ports[27017] }}
         run: pnpm test
 
   build-frontend:

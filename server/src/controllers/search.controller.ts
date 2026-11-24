@@ -5,6 +5,10 @@ import { monthlySemanticSearchAllowances } from "../config/plans.ts";
 import { getAccountSubscription } from "../services/subscription.service.ts";
 import { reserveSemanticSearch } from "../services/usage.service.ts";
 import {
+  noteMetadataPopulation,
+  noteResponseProjection,
+} from "../services/note-collections.service.ts";
+import {
   generateQueryEmbedding,
   cosineSimilarity,
 } from "../services/embedding.service.ts";
@@ -25,7 +29,8 @@ const exactSearch: RequestHandler = async (req, res) => {
     $or: [{ title: match }, { content: match }],
   })
     .select("-embedding")
-    .populate(["tags", "collections"])
+    .select(noteResponseProjection)
+    .populate(noteMetadataPopulation(req.user!.id))
     .sort({ updatedAt: -1, _id: -1 });
   res.json({ results });
 };
@@ -95,7 +100,9 @@ const semanticSearch: RequestHandler = async (req, res) => {
     const notes = await Note.find({
       userId: req.user!.id,
       embeddingStatus: "success",
-    }).populate(["tags", "collections"]);
+    })
+      .select(noteResponseProjection)
+      .populate(noteMetadataPopulation(accountId));
 
     if (notes.length === 0) {
       return res
