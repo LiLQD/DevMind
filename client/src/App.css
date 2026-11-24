@@ -221,6 +221,27 @@ kbd {
   font-size: 13px;
 }
 
+.auth-submit {
+  display: grid;
+}
+
+.auth-error:not(:empty) {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 7px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 14px;
+}
+
+.auth-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
 /* ============================================================
    BUTTONS
    ============================================================ */

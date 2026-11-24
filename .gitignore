@@ -1,6 +1,7 @@
 # Node / Frontend
 client/node_modules/
 client/dist/
+client/test-results/
 client/.env
 client/.env.local
 
