@@ -3,6 +3,9 @@ import type { RequestHandler } from "express";
 import type { HydratedDocument, InferSchemaType } from "mongoose";
 import Account from "../models/Account.ts";
 import { env } from "../config/env.ts";
+import type { Types } from "mongoose";
+import { cookieAuth } from "../config/cookie-auth.ts";
+import { protectCookie } from "./cookie-auth.middleware.ts";
 
 type AccountDocument = HydratedDocument<InferSchemaType<typeof Account.schema>>;
 
@@ -13,12 +16,14 @@ declare global {
         id: AccountDocument["_id"];
         email: AccountDocument["email"];
         role: AccountDocument["role"];
+        name?: string;
       };
+      authSessionId?: Types.ObjectId;
     }
   }
 }
 
-export const protect: RequestHandler = async (req, res, next) => {
+const protectBearer: RequestHandler = async (req, res, next) => {
   let token;
 
   if (
@@ -53,6 +58,8 @@ export const protect: RequestHandler = async (req, res, next) => {
     return res.status(401).json({ message: "Token không hợp lệ" });
   }
 };
+
+export const protect = cookieAuth ? protectCookie : protectBearer;
 
 // The routers run protect before either role check.
 export const admin: RequestHandler = async (req, res, next) => {
