@@ -49,6 +49,7 @@ jobs:
       - name: Run backend API tests
         env:
           COLLECTION_OWNERSHIP_TEST_MONGODB_URI: mongodb://127.0.0.1:${{ job.services.mongodb.ports[27017] }}
+          AUTH_SESSION_TEST_MONGODB_URI: mongodb://127.0.0.1:${{ job.services.mongodb.ports[27017] }}
         run: pnpm test
 
   build-frontend:
