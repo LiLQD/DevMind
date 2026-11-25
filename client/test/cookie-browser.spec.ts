@@ -285,6 +285,28 @@ test("does not replay an unconfirmed note write", async ({ page }) => {
   );
 });
 
+test("restores an existing session after a temporary API outage", async ({
+  page,
+}) => {
+  await page.goto(origin);
+  await register(page);
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({ status: 503, json: { code: "SESSION_UNAVAILABLE" } }),
+  );
+
+  await page.reload();
+  await expect(page.getByRole("alert")).toHaveText(
+    "Could not restore your session.",
+  );
+  await expect(
+    page.getByRole("button", { name: "New note", exact: true }),
+  ).toHaveCount(0);
+
+  await page.unroute("**/api/auth/session");
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByText("Cookie User", { exact: true })).toBeVisible();
+});
+
 test("keeps the workspace locked until sign-out can be confirmed", async ({
   page,
   context,
