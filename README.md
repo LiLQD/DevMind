@@ -79,7 +79,7 @@ The backend is organised into four layers:
 - Node.js 24+ for local development and tests (compiled backend supports Node.js 20+)
 - pnpm (or npm)
 - MongoDB (local or MongoDB Atlas)
-- Redis (optional for development; used for rate limiting)
+- Redis (used for rate limiting)
 - A Google Gemini API key
 
 ### Backend
@@ -87,10 +87,9 @@ The backend is organised into four layers:
 ```bash
 cd server
 pnpm install
-cp .env.example .env
 ```
 
-Fill in the required environment variables, then start the development
+Set the required environment variables in `server/.env`, then start the development
 server:
 
 ```bash
@@ -116,7 +115,7 @@ pnpm run dev
 
 The frontend starts on `http://localhost:5173` and proxies `/api` to the
 local backend. Set `DEVMIND_DEV_API_ORIGIN` if the backend listens on another
-origin. An explicit `VITE_API_URL` still overrides the browser API base.
+origin. Include the exact Vite origin in the backend’s `COOKIE_AUTH_ORIGINS`.
 
 ### Mock checkout
 
@@ -144,12 +143,19 @@ Variable Description
 
 `MONGODB_URI` MongoDB connection string
 
-`JWT_SECRET` Secret used for signing JWT tokens
+`COOKIE_AUTH_ORIGINS` Comma-separated browser origins. Use exact HTTPS origins in production and HTTP loopback origins for local development.
+
+`COOKIE_AUTH_JWT_SECRET` Secret used to sign access cookies, at least 32 characters.
+
+`COOKIE_AUTH_CSRF_SECRET` Separate CSRF signing secret, at least 32 characters.
+
+`AUTH_ACCESS_TTL_SECONDS` Access lifetime, defaults to 900.
+
+`AUTH_REFRESH_TTL_SECONDS` Absolute refresh lifetime, defaults to 2592000.
 
 `GEMINI_API_KEY` Google Gemini API key
 
-`REDIS_URL` Redis URL used for rate limiting;
-optional for development
+`REDIS_URL` Redis URL used for rate limiting
 -----------------------------------------------------------------------
 
 ### Frontend
@@ -158,18 +164,18 @@ Variable Description
 
 ---
 
-`VITE_API_URL` Backend API URL
+`VERCEL_API_ORIGIN` Backend HTTPS origin for the same-origin API rewrite
 
 > Never commit real API keys, database credentials, JWT secrets, or
 > other sensitive environment variables to the repository.
 
 ## 🚢 Deployment
 
-DevMind is designed to be deployed easily using Railway and Vercel.
+The hosted DevMind demo uses Render for the backend and Vercel for the frontend.
 
-### Backend --- Railway
+### Backend --- Render
 
-1.  Connect the GitHub repository to Railway.
+1.  Connect the GitHub repository to Render.
 2.  Set the root directory to `server`.
 3.  Configure the required environment variables.
 4.  Deploy the service.
@@ -178,7 +184,7 @@ DevMind is designed to be deployed easily using Railway and Vercel.
 
 1.  Connect the GitHub repository to Vercel.
 2.  Set the root directory to `client`.
-3.  Add `VITE_API_URL` pointing to the deployed backend.
+3.  Set `VERCEL_API_ORIGIN` to the deployed backend HTTPS origin and include the frontend hostname in `COOKIE_AUTH_ORIGINS` on the backend.
 4.  Deploy the frontend.
 
 Both platforms support automatic deployments when changes are pushed to
@@ -186,9 +192,9 @@ Both platforms support automatic deployments when changes are pushed to
 
 To test same-origin API routing in an isolated preview, set
 `VERCEL_API_ORIGIN` to the staging Render HTTPS origin without an `/api`
-suffix and set `VITE_API_URL=/api`, then redeploy. Verify rate-limit
-identity, forwarded headers, caching, proxy failures, and Markdown import
-and export before enabling the rewrite in production.
+suffix, allow the exact approved preview origin on the backend, and redeploy.
+
+Authentication uses same-origin cookies. Keep the existing cookie secrets and session database during a coordinated rollout so existing sessions can continue. Previously issued bearer tokens are rejected, and users with only a legacy token need to sign in again.
 
 ## 📡 API Overview
 
@@ -200,8 +206,7 @@ Method Endpoint Description
 
 `POST` `/api/auth/register` Create a new user
 
-`POST` `/api/auth/login` Login and get a JWT
-token
+`POST` `/api/auth/login` Sign in and set session cookies
 
 `GET` `/api/notes` List all user notes;
 supports tag/collection

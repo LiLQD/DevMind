@@ -8,7 +8,6 @@ import { test } from "node:test";
 const required = {
   MONGODB_URI: "mongodb://test",
   REDIS_URL: "redis://test",
-  JWT_SECRET: "test-secret",
   GEMINI_API_KEY: "test-key",
 };
 const envModule = new URL("../src/config/env.ts", import.meta.url).href;
@@ -47,7 +46,6 @@ test("loads required settings and development defaults", (t) => {
     PORT: 8080,
     NODE_ENV: "development",
     MOCK_BILLING_ENABLED: false,
-    CORS_ORIGINS: ["http://localhost:5173"],
     TRUST_PROXY: false,
   });
 });
@@ -74,33 +72,24 @@ test("mock billing requires the opt-in for the active environment", (t) => {
   }
 });
 
-test("uses production CORS and proxy defaults", (t) => {
+test("uses production proxy defaults", (t) => {
   const config = readEnv(t, { ...required, NODE_ENV: "production" });
-  assert.deepEqual(config.CORS_ORIGINS, []);
   assert.equal(config.TRUST_PROXY, 1);
 });
 
-test("parses explicit CORS origins and preserves a zero proxy hop count", (t) => {
+test("preserves an explicit port and zero proxy hop count", (t) => {
   const config = readEnv(t, {
     ...required,
     PORT: "5000",
-    CORS_ORIGINS: " https://one.example, , https://two.example ",
     TRUST_PROXY: "0",
-    JWT_SECRET: " secret with spaces ",
   });
   assert.equal(config.PORT, "5000");
-  assert.deepEqual(config.CORS_ORIGINS, [
-    "https://one.example",
-    "https://two.example",
-  ]);
   assert.equal(config.TRUST_PROXY, 0);
-  assert.equal(config.JWT_SECRET, " secret with spaces ");
 });
 
 test("reports absent and blank required values together", (t) => {
   const result = loadEnv(t, {
     REDIS_URL: "   ",
-    JWT_SECRET: required.JWT_SECRET,
     GEMINI_API_KEY: required.GEMINI_API_KEY,
   });
   assert.equal(result.status, 1);

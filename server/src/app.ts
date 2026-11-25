@@ -1,10 +1,8 @@
 import express from "express";
 import type { NextFunction, Request, Response } from "express";
-import cors from "cors";
 import helmet from "helmet";
 import mongoose from "mongoose";
 import { env } from "./config/env.ts";
-import { cookieAuth } from "./config/cookie-auth.ts";
 import { requireCookieOrigin } from "./middleware/cookie-auth.middleware.ts";
 
 import authRoutes from "./routes/auth.routes.ts";
@@ -32,22 +30,12 @@ export function createApp() {
     next();
   });
   if (!env.MOCK_BILLING_ENABLED) app.use("/api/mock-billing", notFound);
-  if (cookieAuth) {
-    app.use("/api", requireCookieOrigin);
-  } else {
-    app.use(
-      cors({
-        origin: (origin, callback) => {
-          callback(null, !origin || env.CORS_ORIGINS.includes(origin));
-        },
-      }),
-    );
-  }
+  app.use("/api", requireCookieOrigin);
   app.use(express.json({ limit: "1mb" }));
 
   // Logging
   app.use((req, res, next) => {
-    console.log(cookieAuth ? req.method : `${req.method} ${req.url}`);
+    console.log(req.method);
     next();
   });
 
@@ -141,8 +129,8 @@ export function createApp() {
       const isServerError = status >= 500;
 
       if (
-        cookieAuth &&
-        (err.type === "entity.parse.failed" || err.type === "entity.too.large")
+        err.type === "entity.parse.failed" ||
+        err.type === "entity.too.large"
       ) {
         const tooLarge = err.type === "entity.too.large";
         return res.status(tooLarge ? 413 : 400).json({
@@ -155,8 +143,7 @@ export function createApp() {
           },
         });
       }
-      if (!cookieAuth) console.error("Error:", err);
-      else if (isServerError) console.error("Cookie-mode API request failed.");
+      if (isServerError) console.error("Cookie-mode API request failed.");
 
       res.status(status).json({
         success: false,
@@ -177,15 +164,12 @@ export function createApp() {
 
 export default createApp();
 
-function notFound(req: Request, res: Response) {
-  if (!cookieAuth) console.log(`404: ${req.method} ${req.originalUrl}`);
+function notFound(_req: Request, res: Response) {
   res.status(404).json({
     success: false,
     error: {
       code: "NOT_FOUND",
-      message: cookieAuth
-        ? "Endpoint not found."
-        : `Không tìm thấy endpoint ${req.method} ${req.originalUrl}`,
+      message: "Endpoint not found.",
     },
   });
 }

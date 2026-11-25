@@ -6,7 +6,6 @@ const nodeEnv = process.env.NODE_ENV || "development";
 const required = {
   MONGODB_URI: process.env.MONGODB_URI ?? "",
   REDIS_URL: process.env.REDIS_URL ?? "",
-  JWT_SECRET: process.env.JWT_SECRET ?? "",
   GEMINI_API_KEY: process.env.GEMINI_API_KEY ?? "",
 };
 const missingVariables = Object.entries(required)
@@ -24,10 +23,6 @@ if (trustProxyValue !== undefined && !/^\d+$/.test(trustProxyValue)) {
   throw new Error("TRUST_PROXY must be a non-negative integer");
 }
 
-const configuredOrigins = process.env.CORS_ORIGINS?.split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
-
 export const env = {
   PORT: process.env.PORT || 8080,
   NODE_ENV: nodeEnv,
@@ -37,9 +32,6 @@ export const env = {
     (process.env.NODE_ENV === "production" &&
       process.env.ENABLE_PRODUCTION_MOCK_BILLING === "true"),
   ...required,
-  CORS_ORIGINS:
-    configuredOrigins ||
-    (nodeEnv === "production" ? [] : ["http://localhost:5173"]),
   TRUST_PROXY:
     trustProxyValue === undefined
       ? nodeEnv === "production"
