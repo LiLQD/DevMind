@@ -1,15 +1,15 @@
 import Account from "../models/Account.ts";
 import type { RequestHandler } from "express";
 import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
-import { env } from "../config/env.ts";
-import { cookieAuth } from "../config/cookie-auth.ts";
 import { startCookieSession } from "./cookie-auth.controller.ts";
 import { sessionUnavailable } from "../middleware/cookie-auth.middleware.ts";
 
 type Credentials = { email?: unknown; password?: unknown };
 
-function validCredentials(email: unknown, password: unknown) {
+function validCredentials(
+  credentials: Credentials,
+): credentials is { email: string; password: string } {
+  const { email, password } = credentials;
   return (
     typeof email === "string" &&
     Boolean(email.trim()) &&
@@ -29,31 +29,26 @@ function isDuplicateKey(error: unknown) {
 
 export const register: RequestHandler = async (req, res) => {
   try {
-    const { email, password, name }: Credentials & { name?: unknown } =
-      cookieAuth ? (req.body ?? {}) : req.body;
+    const credentials: Credentials & { name?: unknown } = req.body ?? {};
+    const { name } = credentials;
     if (
-      cookieAuth &&
-      (!validCredentials(email, password) ||
-        typeof name !== "string" ||
-        !name.trim())
+      !validCredentials(credentials) ||
+      typeof name !== "string" ||
+      !name.trim()
     ) {
       return res
         .status(400)
         .json({ message: "Enter a name, email, and password." });
     }
 
+    const { email, password } = credentials;
     // Keep the raw email value for Mongoose's existing query casting.
-    const existing = await Account.findOne({
-      email: email as string | undefined,
-    });
+    const existing = await Account.findOne({ email });
     if (existing) {
       return res.status(400).json({ message: "Email đã tồn tại" });
     }
 
     const salt = await bcrypt.genSalt(10);
-    if (typeof password !== "string" && !Buffer.isBuffer(password)) {
-      throw new TypeError("Password must be a string or Buffer.");
-    }
     const hashedPassword = await bcrypt.hash(password, salt);
 
     const account = new Account({
@@ -65,66 +60,38 @@ export const register: RequestHandler = async (req, res) => {
 
     await account.save();
 
-    if (cookieAuth) {
-      return await startCookieSession(
-        res,
-        {
-          id: account._id,
-          email: account.email,
-          name: account.name,
-          role: account.role,
-        },
-        201,
-      );
-    }
-
-    const token = jwt.sign(
-      { id: account._id, role: account.role },
-      env.JWT_SECRET,
-      { expiresIn: "7d" },
-    );
-
-    res.status(201).json({
-      token,
-      user: {
+    return await startCookieSession(
+      res,
+      {
         id: account._id,
         email: account.email,
         name: account.name,
         role: account.role,
       },
-    });
+      201,
+    );
   } catch (error) {
-    if (cookieAuth) {
-      if (isDuplicateKey(error))
-        return res.status(400).json({ message: "Email đã tồn tại" });
-      return sessionUnavailable(res);
-    }
-    console.error("Register error:", error);
-    res.status(500).json({ message: "Đăng ký thất bại" });
+    if (isDuplicateKey(error))
+      return res.status(400).json({ message: "Email đã tồn tại" });
+    return sessionUnavailable(res);
   }
 };
 
 export const login: RequestHandler = async (req, res) => {
   try {
-    const { email, password }: Credentials = cookieAuth
-      ? (req.body ?? {})
-      : req.body;
-    if (cookieAuth && !validCredentials(email, password)) {
+    const credentials: Credentials = req.body ?? {};
+    if (!validCredentials(credentials)) {
       return res.status(400).json({ message: "Enter an email and password." });
     }
 
-    const account = await Account.findOne({
-      email: email as string | undefined,
-    });
-    if (!account || (cookieAuth && account.isActive === false)) {
+    const { email, password } = credentials;
+    const account = await Account.findOne({ email });
+    if (!account || account.isActive === false) {
       return res
         .status(401)
         .json({ message: "Email hoặc mật khẩu không đúng" });
     }
 
-    if (typeof password !== "string" && !Buffer.isBuffer(password)) {
-      throw new TypeError("Password must be a string or Buffer.");
-    }
     const valid = await bcrypt.compare(password, account.password);
     if (!valid) {
       return res
@@ -132,38 +99,18 @@ export const login: RequestHandler = async (req, res) => {
         .json({ message: "Email hoặc mật khẩu không đúng" });
     }
 
-    if (cookieAuth) {
-      return await startCookieSession(
-        res,
-        {
-          id: account._id,
-          email: account.email,
-          name: account.name,
-          role: account.role,
-        },
-        200,
-      );
-    }
-
-    const token = jwt.sign(
-      { id: account._id, role: account.role },
-      env.JWT_SECRET,
-      { expiresIn: "7d" },
-    );
-
-    res.json({
-      token,
-      user: {
+    return await startCookieSession(
+      res,
+      {
         id: account._id,
         email: account.email,
         name: account.name,
         role: account.role,
       },
-    });
-  } catch (error) {
-    if (cookieAuth) return sessionUnavailable(res);
-    console.error("Login error:", error);
-    res.status(500).json({ message: "Đăng nhập thất bại" });
+      200,
+    );
+  } catch {
+    return sessionUnavailable(res);
   }
 };
 

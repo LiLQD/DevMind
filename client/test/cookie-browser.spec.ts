@@ -36,8 +36,6 @@ test.beforeAll(async () => {
       MONGODB_URI: mongoUri,
       REDIS_URL: "redis://cookie-browser-test",
       GEMINI_API_KEY: "synthetic-browser-test",
-      JWT_SECRET: "synthetic-legacy-key",
-      ENABLE_COOKIE_AUTH: "true",
       COOKIE_AUTH_ORIGINS: origin,
       COOKIE_AUTH_JWT_SECRET: "synthetic-cookie-jwt-secret-for-browser-tests",
       COOKIE_AUTH_CSRF_SECRET: "synthetic-cookie-csrf-secret-for-browser-tests",
@@ -58,7 +56,6 @@ test.beforeAll(async () => {
   process.env.DEVMIND_DEV_API_ORIGIN = `http://127.0.0.1:${port}`;
   try {
     frontend = await createServer({
-      define: { "import.meta.env.VITE_ENABLE_COOKIE_AUTH": '"true"' },
       server: { host: "127.0.0.1", port: 4180, strictPort: true },
     });
   } finally {

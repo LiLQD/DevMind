@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { Request } from "@playwright/test";
 
 const accountA = {
-  token: "account-a",
+  sessionId: "account-a",
   note: {
     _id: "note-a",
     title: "Account A private note",
@@ -13,7 +13,7 @@ const accountA = {
 };
 
 const accountB = {
-  token: "account-b",
+  sessionId: "account-b",
   note: {
     _id: "note-b",
     title: "Account B note",
@@ -29,24 +29,23 @@ for (const outcome of ["abort", "late success", "late error"]) {
     page,
   }) => {
     await page.addInitScript(
-      ({ token, ignoresAbort }) => {
-        localStorage.setItem("token", token);
+      ({ sessionId, ignoresAbort }) => {
         if (!ignoresAbort) return;
 
         // Simulate a transport that still delivers account A's response after abort.
         const fetch = window.fetch.bind(window);
         window.fetch = (input, options) =>
-          new Headers(options?.headers).get("Authorization") ===
-          `Bearer ${token}`
+          new Headers(options?.headers).get("X-DevMind-Session") === sessionId
             ? fetch(input, { ...options, signal: undefined })
             : fetch(input, options);
       },
-      { token: accountA.token, ignoresAbort },
+      { sessionId: accountA.sessionId, ignoresAbort },
     );
 
     const releaseA = Promise.withResolvers<void>();
     const releaseBSearch = Promise.withResolvers<void>();
     let holdCollectionsA = false;
+    let activeAccount: typeof accountA | null = accountA;
     const notesFiltersB: (string | null)[] = [];
     const heldA = new Map<string, Request>();
     const pathsA = ["/api/notes", "/api/collections", "/api/notes/search"];
@@ -61,13 +60,42 @@ for (const outcome of ["abort", "late success", "late error"]) {
       const url = new URL(request.url());
       const { pathname } = url;
       const isAccountA =
-        request.headers().authorization === `Bearer ${accountA.token}`;
+        request.headers()["x-devmind-session"] === accountA.sessionId;
 
-      if (pathname === "/api/auth/login") {
-        await route.fulfill({
-          json: { token: accountB.token, user: { name: "Account B" } },
+      if (pathname === "/api/auth/session") {
+        if (!activeAccount)
+          return route.fulfill({
+            status: 401,
+            json: { code: "AUTH_REQUIRED" },
+          });
+        return route.fulfill({
+          json: {
+            sessionId: activeAccount.sessionId,
+            user: {
+              id: activeAccount.sessionId,
+              name: activeAccount.sessionId,
+            },
+          },
         });
-        return;
+      }
+      if (pathname === "/api/auth/csrf") {
+        return route.fulfill({
+          json: {
+            csrfToken: url.search
+              ? "credentials-proof"
+              : `${activeAccount?.sessionId}.9999999999.proof`,
+          },
+        });
+      }
+      if (pathname === "/api/auth/login") {
+        activeAccount = accountB;
+        return route.fulfill({
+          json: { user: { id: accountB.sessionId, name: "Account B" } },
+        });
+      }
+      if (pathname === "/api/auth/logout") {
+        activeAccount = null;
+        return route.fulfill({ status: 204 });
       }
       if (pathname === "/api/subscription") {
         await route.fulfill({
@@ -162,12 +190,10 @@ for (const outcome of ["abort", "late success", "late error"]) {
       await expect(searching).toBeDisabled();
 
       if (ignoresAbort) releaseA.resolve();
-      const errors = (await settledA).map(
-        (request) => request.failure()?.errorText,
+      const failed = (await settledA).map(
+        (request) => request.failure() !== null,
       );
-      expect(errors).toEqual(
-        pathsA.map(() => (ignoresAbort ? undefined : "net::ERR_ABORTED")),
-      );
+      expect(failed).toEqual(pathsA.map(() => !ignoresAbort));
       await page.evaluate(
         () =>
           new Promise<void>((resolve) => {

@@ -17,7 +17,6 @@ import SearchBar from "./components/SearchBar";
 import {
   authenticateCookieSession,
   CookieAuthError,
-  cookieAuthEnabled,
   cookieSessionChannel,
   cookieWorkspaceRequest,
   logoutCookieSession,
@@ -27,10 +26,6 @@ import {
 import type { CookieSession } from "./features/auth/cookie-session";
 
 const mockCheckoutEnabled = import.meta.env.VITE_ENABLE_MOCK_BILLING === "true";
-const API_BASE =
-  import.meta.env.VITE_API_URL ||
-  (import.meta.env.DEV ? "/api" : "http://localhost:8080/api");
-
 type User = { name?: string; email?: string };
 type NotificationState = {
   message: string;
@@ -99,17 +94,16 @@ function authResponseError(status: number, message: string, isLogin: boolean) {
 
 function App() {
   // --- Auth ---
-  const [{ token, cookie, requests }, setSession] = useState(() => ({
-    token: cookieAuthEnabled ? null : localStorage.getItem("token"),
+  const [{ cookie, requests }, setSession] = useState(() => ({
     cookie: null as CookieSession | null,
     requests: new AbortController(),
   }));
-  const sessionKey = cookie?.sessionId ?? token;
+  const sessionKey = cookie?.sessionId;
   const sessionSignal = requests.signal;
   const [user, setUser] = useState<User | null>(null);
   const [cookieAction, setCookieAction] = useState<
     "restoring" | "restore-error" | "signing-out" | "logout-error" | null
-  >(cookieAuthEnabled ? "restoring" : null);
+  >("restoring");
   const cookieChannelRef = useRef<BroadcastChannel | null>(null);
   const logoutTargetRef = useRef<CookieSession | null>(null);
   const draftOwnerRef = useRef<string | null>(null);
@@ -245,9 +239,9 @@ function App() {
     options: RequestInit = {},
   ): Promise<T> => {
     sessionSignal.throwIfAborted();
+    if (!cookie) throw new Error("Sign in to continue.");
     const headers = {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     };
     // Cancel reads on sign-out and discard late write responses without aborting writes.
@@ -257,53 +251,29 @@ function App() {
         ? AbortSignal.any([sessionSignal, options.signal])
         : sessionSignal
       : options.signal;
-    if (cookie) {
-      try {
-        const data = await cookieWorkspaceRequest(
-          cookie,
-          sessionSignal,
-          endpoint,
-          {
-            ...options,
-            headers,
-            signal,
-          },
-        );
-        sessionSignal.throwIfAborted();
-        return data as T;
-      } catch (error) {
-        if (!sessionSignal.aborted && needsCookieSignIn(error)) {
-          clearWorkspace(cookie.user.id);
-          setIsLogin(true);
-          setAuthError(
-            "Sign in to continue. Unsaved edits can be restored for the same account.",
-          );
-        }
-        throw error;
-      }
-    }
-    const res = await fetch(`${API_BASE}${endpoint}`, {
-      ...options,
-      headers,
-      signal,
-    });
-    let data: unknown = {};
     try {
-      data = await res.json();
-    } catch {
-      /* body không phải JSON */
-    }
-    sessionSignal.throwIfAborted();
-    if (!res.ok) {
-      const body = data as {
-        message?: string;
-        error?: { message?: string };
-      } | null;
-      throw new Error(
-        body?.message || body?.error?.message || "Request failed",
+      const data = await cookieWorkspaceRequest(
+        cookie,
+        sessionSignal,
+        endpoint,
+        {
+          ...options,
+          headers,
+          signal,
+        },
       );
+      sessionSignal.throwIfAborted();
+      return data as T;
+    } catch (error) {
+      if (!sessionSignal.aborted && needsCookieSignIn(error)) {
+        clearWorkspace(cookie.user.id);
+        setIsLogin(true);
+        setAuthError(
+          "Sign in to continue. Unsaved edits can be restored for the same account.",
+        );
+      }
+      throw error;
     }
-    return data as T;
   };
 
   // --- Auth handlers ---
@@ -321,60 +291,9 @@ function App() {
     try {
       const endpoint = isLogin ? "/auth/login" : "/auth/register";
       const payload = isLogin ? { email, password } : { email, password, name };
-      if (cookieAuthEnabled) {
-        const current = await authenticateCookieSession(endpoint, payload);
-        adoptCookieSession(current);
-        cookieChannelRef.current?.postMessage("session-changed");
-        setEmail("");
-        setPassword("");
-        setName("");
-        showNotification(
-          isLogin ? "Welcome back." : "Account created.",
-          "success",
-        );
-        return;
-      }
-      const response = await fetch(`${API_BASE}${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }).catch(() => {
-        setAuthError(
-          "Unable to reach DevMind. Check your connection and try again.",
-        );
-        return null;
-      });
-      if (!response) return;
-
-      const data: {
-        token?: unknown;
-        user?: User;
-        message?: unknown;
-        error?: { message?: unknown };
-      } | null = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        const message = data?.message ?? data?.error?.message;
-        setAuthError(
-          authResponseError(
-            response.status,
-            typeof message === "string" ? message : "",
-            isLogin,
-          ),
-        );
-        return;
-      }
-      if (typeof data?.token !== "string" || !data.token) {
-        setAuthError(authResponseError(500, "", isLogin));
-        return;
-      }
-      localStorage.setItem("token", data.token);
-      setSession({
-        token: data.token,
-        cookie: null,
-        requests: new AbortController(),
-      });
-      setUser(data.user ?? null);
+      const current = await authenticateCookieSession(endpoint, payload);
+      adoptCookieSession(current);
+      cookieChannelRef.current?.postMessage("session-changed");
       setEmail("");
       setPassword("");
       setName("");
@@ -385,7 +304,7 @@ function App() {
     } catch (error) {
       if (
         error instanceof CookieAuthError &&
-        [400, 401, 429].includes(error.status) &&
+        [400, 401, 422, 429, 500].includes(error.status) &&
         !error.code
       ) {
         setAuthError(authResponseError(error.status, error.message, isLogin));
@@ -415,7 +334,7 @@ function App() {
     exportRequestRef.current?.abort();
     exportRequestRef.current = null;
     setIsExportingNotes(false);
-    setSession({ token: null, cookie: null, requests: new AbortController() });
+    setSession({ cookie: null, requests: new AbortController() });
     setUser(null);
     if (notificationTimerRef.current)
       clearTimeout(notificationTimerRef.current);
@@ -448,7 +367,6 @@ function App() {
     draftOwnerRef.current = null;
     setAuthError("");
     setSession({
-      token: null,
       cookie: current,
       requests: new AbortController(),
     });
@@ -486,7 +404,6 @@ function App() {
 
   const handleLogout = () => {
     clearWorkspace();
-    localStorage.removeItem("token");
     if (cookie) {
       setIsLogin(true);
       logoutTargetRef.current = cookie;
@@ -503,8 +420,6 @@ function App() {
   });
 
   useEffect(() => {
-    if (!cookieAuthEnabled) return;
-    localStorage.removeItem("token");
     const request = new AbortController();
     void restoreSession(request.signal);
     if (typeof BroadcastChannel !== "undefined") {
