@@ -29,11 +29,6 @@ function browserOrigins(raw: string | undefined) {
 }
 
 function readCookieAuthConfig() {
-  const enabled = process.env.ENABLE_COOKIE_AUTH;
-  if (enabled === undefined || enabled === "false") return null;
-  if (enabled !== "true")
-    throw new Error("ENABLE_COOKIE_AUTH must be true or false.");
-
   const jwtSecret = process.env.COOKIE_AUTH_JWT_SECRET?.trim();
   const csrfSecret = process.env.COOKIE_AUTH_CSRF_SECRET?.trim();
   if (
@@ -41,9 +36,7 @@ function readCookieAuthConfig() {
     !csrfSecret ||
     jwtSecret.length < 32 ||
     csrfSecret.length < 32 ||
-    jwtSecret === csrfSecret ||
-    jwtSecret === env.JWT_SECRET ||
-    csrfSecret === env.JWT_SECRET
+    jwtSecret === csrfSecret
   ) {
     throw new Error(
       "Cookie auth requires distinct JWT and CSRF secrets of at least 32 characters.",

@@ -3,6 +3,12 @@ import { randomUUID } from "node:crypto";
 import { mock, test } from "node:test";
 import mongoose from "mongoose";
 import request from "supertest";
+import {
+  configureTestCookies,
+  sessionHeaders,
+  submitCredentials,
+  testOrigin,
+} from "../test-support/cookie-fixture.js";
 
 const uri = process.env.MOCK_BILLING_TEST_MONGODB_URI;
 const moduleUrl = (path) => new URL(`../src/${path}`, import.meta.url).href;
@@ -24,7 +30,7 @@ test(
     process.env.ENABLE_PRODUCTION_MOCK_BILLING = "true";
     process.env.MONGODB_URI = uri;
     process.env.REDIS_URL = "redis://mock-billing-test";
-    process.env.JWT_SECRET = "mock-billing-test-secret";
+    configureTestCookies();
     process.env.GEMINI_API_KEY = "mock-billing-test-key";
 
     mock.module(moduleUrl("config/redis.ts"), {
@@ -83,38 +89,31 @@ test(
     const base = "/api/mock-billing/checkouts";
     const client = request(app);
     async function register(email) {
-      const { body } = await client
-        .post("/api/auth/register")
-        .send({ email, password: "password123", name: "Mock Billing Test" })
-        .expect(201);
+      const response = await submitCredentials(
+        client,
+        "register",
+        { email, password: "password123", name: "Mock Billing Test" },
+        201,
+      );
       const { _id: accountId } = await Account.findOne({ email }).lean();
-      const authorization = `Bearer ${body.token}`;
+      const headers = await sessionHeaders(client, response);
       return {
         accountId,
         importNotes: (notes) =>
-          client
-            .post("/api/notes/import")
-            .set("Authorization", authorization)
-            .send({ notes }),
-        start: () => client.post(base).set("Authorization", authorization),
-        read: (id) =>
-          client.get(`${base}/${id}`).set("Authorization", authorization),
+          client.post("/api/notes/import").set(headers).send({ notes }),
+        start: () => client.post(base).set(headers),
+        read: (id) => client.get(`${base}/${id}`).set(headers),
         action: (id, action, expectedRevision, extra = {}) =>
           client
             .post(`${base}/${id}/actions`)
-            .set("Authorization", authorization)
+            .set(headers)
             .send({ action, expectedRevision, ...extra }),
         subscription: async () =>
-          (
-            await client
-              .get("/api/subscription")
-              .set("Authorization", authorization)
-              .expect(200)
-          ).body,
+          (await client.get("/api/subscription").set(headers).expect(200)).body,
         search: () =>
           client
             .post("/api/notes/search")
-            .set("Authorization", authorization)
+            .set(headers)
             .send({ query: "billing" }),
       };
     }
@@ -137,6 +136,7 @@ test(
         const invalid = { key: "invalid", title: " ", content: "# Invalid" };
         await client
           .post("/api/notes/import")
+          .set("Origin", testOrigin)
           .send({ notes: [first] })
           .expect(401);
         await owner.importNotes([first]).expect(403);
@@ -241,9 +241,12 @@ test(
         assert.match(checkout.message, /No money is charged/);
         assert.equal((await owner.subscription()).plan, "free");
 
-        await client.post(base).expect(401);
+        await client.post(base).set("Origin", testOrigin).expect(401);
         await client.get(`${base}/${checkout.id}`).expect(401);
-        await client.post(`${base}/${checkout.id}/actions`).expect(401);
+        await client
+          .post(`${base}/${checkout.id}/actions`)
+          .set("Origin", testOrigin)
+          .expect(401);
         await other.read(checkout.id).expect(404);
         await other.action(checkout.id, "succeed", 0).expect(404);
         assert.deepEqual(

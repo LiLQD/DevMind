@@ -1,6 +1,30 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  let signedIn = false;
+  await page.route("**/api/auth/session", (route) =>
+    signedIn
+      ? route.fulfill({
+          json: {
+            sessionId: "test-session",
+            user: { id: "developer", name: "Test Developer" },
+          },
+        })
+      : route.fulfill({ status: 401, json: { code: "AUTH_REQUIRED" } }),
+  );
+  await page.route("**/api/auth/csrf?purpose=credentials", (route) =>
+    route.fulfill({ json: { csrfToken: "test-proof" } }),
+  );
+  page.on("response", (response) => {
+    if (
+      response.url().endsWith("/api/auth/register") &&
+      response.status() === 201
+    )
+      signedIn = true;
+  });
+});
+
 async function fillCredentials(page: Page) {
   await page.getByLabel("Email").fill("developer@example.com");
   await page.getByLabel("Password").fill("test-password");
@@ -27,7 +51,7 @@ test("registration prevents duplicate submissions and succeeds on retry after a 
     } else {
       await route.fulfill({
         status: 201,
-        json: { token: "test-token", user: { name: "Test Developer" } },
+        json: { user: { id: "developer", name: "Test Developer" } },
       });
     }
   });
@@ -72,9 +96,7 @@ test("registration prevents duplicate submissions and succeeds on retry after a 
   await submit.click();
   await expect(page.getByRole("status")).toContainText("Account created.");
   await expect(form).toHaveCount(0);
-  expect(await page.evaluate(() => localStorage.getItem("token"))).toBe(
-    "test-token",
-  );
+  expect(await page.evaluate(() => localStorage.getItem("token"))).toBeNull();
   expect(attempts).toBe(2);
 });
 

@@ -21,12 +21,25 @@ test.beforeAll(async () => {
       request.socket.destroy();
       return;
     }
-    if (request.headers.authorization !== "Bearer test-token") {
+    if (request.headers.cookie !== "devmind-access=test-cookie") {
       response.writeHead(401).end(JSON.stringify({ message: "Unauthorized" }));
       return;
     }
 
     switch (request.url) {
+      case "/api/auth/session":
+        response.end(
+          JSON.stringify({
+            sessionId: "proxy-session",
+            user: { id: "proxy-account", name: "Proxy account" },
+          }),
+        );
+        break;
+      case "/api/auth/csrf":
+        response.end(
+          JSON.stringify({ csrfToken: "proxy-session.9999999999.proof" }),
+        );
+        break;
       case "/api/notes?collectionId=example":
         response.end(
           JSON.stringify({
@@ -83,7 +96,6 @@ test.beforeAll(async () => {
   process.env.DEVMIND_DEV_API_ORIGIN = `http://127.0.0.1:${apiPort}`;
   try {
     frontend = await createServer({
-      define: { "import.meta.env.VITE_API_URL": '"/api"' },
       server: { host: "127.0.0.1", port: 0 },
     });
   } finally {
@@ -103,7 +115,7 @@ test.afterAll(async () => {
   }
 });
 
-test("forwards API paths, bearer headers, no-store, and upstream status", async ({
+test("forwards API paths, cookie headers, no-store, and upstream status", async ({
   request,
 }) => {
   const url = new URL("/api/notes?collectionId=example", origin).href;
@@ -113,7 +125,7 @@ test("forwards API paths, bearer headers, no-store, and upstream status", async 
 
   const response = await request.get(url, {
     headers: {
-      Authorization: "Bearer test-token",
+      Cookie: "devmind-access=test-cookie",
       Forwarded: "for=192.0.2.2",
       "X-Forwarded-For": "192.0.2.2",
       "X-Real-IP": "192.0.2.2",
@@ -143,8 +155,11 @@ test("a broken upstream returns an API failure instead of the SPA", async ({
 
 test("bulk imports Markdown through the proxy and downloads the full export", async ({
   page,
+  context,
 }) => {
-  await page.addInitScript(() => localStorage.setItem("token", "test-token"));
+  await context.addCookies([
+    { name: "devmind-access", value: "test-cookie", url: origin },
+  ]);
   await page.goto(origin);
   await page.getByRole("button", { name: "Bulk import" }).click();
   const dialog = page.getByRole("dialog", { name: "Bulk Markdown import" });

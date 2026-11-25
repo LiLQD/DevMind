@@ -3,6 +3,11 @@ import { randomUUID } from "node:crypto";
 import { mock, test } from "node:test";
 import mongoose from "mongoose";
 import request from "supertest";
+import {
+  configureTestCookies,
+  sessionHeaders,
+  submitCredentials,
+} from "../test-support/cookie-fixture.js";
 
 const uri = process.env.COLLECTION_OWNERSHIP_TEST_MONGODB_URI;
 const moduleUrl = (path) => new URL(`../src/${path}`, import.meta.url).href;
@@ -22,7 +27,7 @@ test(
     assert.ok(uri, "CI requires COLLECTION_OWNERSHIP_TEST_MONGODB_URI");
     process.env.MONGODB_URI = uri;
     process.env.REDIS_URL = "redis://collection-ownership-test";
-    process.env.JWT_SECRET = "collection-ownership-test-secret";
+    configureTestCookies();
     process.env.GEMINI_API_KEY = "collection-ownership-test-key";
 
     mock.module(moduleUrl("config/redis.ts"), {
@@ -74,13 +79,15 @@ test(
 
     const client = request(app);
     async function register(email) {
-      const { body } = await client
-        .post("/api/auth/register")
-        .send({ email, password: "test-password", name: "Ownership Test" })
-        .expect(201);
+      const response = await submitCredentials(
+        client,
+        "register",
+        { email, password: "test-password", name: "Ownership Test" },
+        201,
+      );
       return {
-        id: new mongoose.Types.ObjectId(body.user.id),
-        bearer: `Bearer ${body.token}`,
+        id: new mongoose.Types.ObjectId(response.body.user.id),
+        headers: await sessionHeaders(client, response),
       };
     }
     const owner = await register("owner@example.com");
@@ -103,7 +110,7 @@ test(
       title: "Ownership fixture",
       content: "isolation boundary",
     };
-    const authorized = (req) => req.set("Authorization", owner.bearer);
+    const authorized = (req) => req.set(owner.headers);
 
     function assertCollections(note, expectedIds) {
       assert.deepEqual(

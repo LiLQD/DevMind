@@ -38,7 +38,7 @@ function isSafeMethod(method: string) {
 export const requireCookieOrigin: RequestHandler = (req, res, next) => {
   if (
     !isSafeMethod(req.method) &&
-    !cookieAuth!.origins.has(req.get("Origin") ?? "")
+    !cookieAuth.origins.has(req.get("Origin") ?? "")
   ) {
     return authFailure(res, "CSRF_REJECTED");
   }
@@ -50,7 +50,7 @@ export function canBootstrapProof(req: Request) {
   const fetchSite = req.get("Sec-Fetch-Site");
   return (
     req.get("X-DevMind-CSRF") === "bootstrap" &&
-    (!origin || cookieAuth!.origins.has(origin)) &&
+    (!origin || cookieAuth.origins.has(origin)) &&
     (!fetchSite || fetchSite === "same-origin")
   );
 }

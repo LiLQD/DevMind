@@ -13,7 +13,7 @@ const idPattern = /^[a-f0-9]{24}$/;
 const options = {
   path: "/",
   httpOnly: true,
-  secure: cookieAuth?.secure ?? true,
+  secure: cookieAuth.secure,
   sameSite: "lax" as const,
 };
 const prefix = options.secure ? "__Host-devmind-" : "devmind-";
@@ -38,7 +38,7 @@ export function readAccessCookie(req: Request) {
   const token = readCookie(req, accessName);
   if (!token) return { status: "missing" } as const;
   try {
-    const claims = jwt.verify(token, cookieAuth!.jwtSecret, {
+    const claims = jwt.verify(token, cookieAuth.jwtSecret, {
       algorithms: ["HS256"],
       issuer,
       audience,
@@ -73,7 +73,7 @@ export function setSessionCookies(
       sid: credentials.sessionId.toHexString(),
       exp: Math.floor(credentials.accessExpiresAt.getTime() / 1000),
     },
-    cookieAuth!.jwtSecret,
+    cookieAuth.jwtSecret,
     {
       algorithm: "HS256",
       issuer,
@@ -98,7 +98,7 @@ export function clearSessionCookies(res: Response) {
 
 type ProofScope = "credentials" | "session";
 function signProof(scope: ProofScope, binding: string, expiry: string) {
-  return createHmac("sha256", cookieAuth!.csrfSecret)
+  return createHmac("sha256", cookieAuth.csrfSecret)
     .update(`${scope}:${binding}:${expiry}`)
     .digest("base64url");
 }

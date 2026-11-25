@@ -3,8 +3,6 @@ export type CookieSession = {
   user: { id: string; name?: string; email?: string };
 };
 
-export const cookieAuthEnabled =
-  import.meta.env.VITE_ENABLE_COOKIE_AUTH === "true";
 export const cookieSessionChannel = "devmind-cookie-session";
 const csrfHeader = "X-DevMind-CSRF";
 const sessionHeader = "X-DevMind-Session";

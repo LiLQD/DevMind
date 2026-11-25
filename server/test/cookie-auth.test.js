@@ -36,7 +36,7 @@ const onlyRefresh = (jar) =>
   jar.split("; ").find((cookie) => cookie.startsWith(refreshName));
 
 test(
-  "staged cookie auth over Express and MongoDB",
+  "cookie auth over Express and MongoDB",
   {
     skip:
       !uri &&
@@ -46,11 +46,9 @@ test(
   async (t) => {
     assert.ok(uri, "CI requires AUTH_SESSION_TEST_MONGODB_URI");
     Object.assign(process.env, {
-      ENABLE_COOKIE_AUTH: "true",
       COOKIE_AUTH_ORIGINS: origin,
       COOKIE_AUTH_JWT_SECRET: jwtSecret,
       COOKIE_AUTH_CSRF_SECRET: "synthetic-cookie-csrf-key-for-tests",
-      JWT_SECRET: "legacy-bearer-test-secret",
       MONGODB_URI: uri,
       REDIS_URL: "redis://cookie-auth-test",
       GEMINI_API_KEY: "cookie-auth-test-key",
@@ -167,11 +165,16 @@ test(
           .set("X-DevMind-Session", new mongoose.Types.ObjectId().toString())
           .expect(401)
           .expect(({ body }) => assert.equal(body.code, "SESSION_CHANGED"));
-        const bearer = jwt.sign({ id: user.id }, process.env.JWT_SECRET);
+        const bearer = jwt.sign(
+          { id: user.id, role: user.role },
+          "legacy-bearer-test-secret",
+          { expiresIn: "7d" },
+        );
         await client
           .get("/api/notes")
           .set("Authorization", `Bearer ${bearer}`)
-          .expect(401);
+          .expect(401)
+          .expect(({ body }) => assert.equal(body.code, "AUTH_REQUIRED"));
 
         await credentials(
           "login",

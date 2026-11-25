@@ -3,8 +3,15 @@ import { beforeEach, mock, test } from "node:test";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import request from "supertest";
+import { Types } from "mongoose";
+import {
+  configureTestCookies,
+  sessionHeaders,
+  submitCredentials,
+  testOrigin,
+} from "../test-support/cookie-fixture.js";
 
-process.env.JWT_SECRET = "smoke-test-secret";
+configureTestCookies();
 process.env.REDIS_URL = "redis://smoke-test";
 process.env.MONGODB_URI = "mongodb://smoke-test";
 process.env.GEMINI_API_KEY = "smoke-test-key";
@@ -30,6 +37,7 @@ const query = (value) => {
 };
 
 const accounts = [];
+const sessions = [];
 const notes = [];
 const collections = [];
 const tags = [];
@@ -74,6 +82,7 @@ let nextId = 1;
 const matches = (document, filter) =>
   Object.entries(filter).every(([key, value]) => {
     if (key === "$or") return value.some((clause) => matches(document, clause));
+    if (value && "$gt" in Object(value)) return document[key] > value.$gt;
     if (value instanceof RegExp) return value.test(document[key]);
     if (Array.isArray(document[key])) return document[key].includes(value);
     return String(document[key]) === String(value);
@@ -81,7 +90,9 @@ const matches = (document, filter) =>
 
 class Account {
   constructor(data) {
-    Object.assign(this, data, { _id: String(nextId++) });
+    Object.assign(this, data, {
+      _id: (nextId++).toString(16).padStart(24, "0"),
+    });
   }
 
   async save() {
@@ -99,6 +110,27 @@ class Account {
     );
   }
 }
+
+mock.module(moduleUrl("src/models/AuthSession.ts"), {
+  exports: {
+    default: {
+      init: async () => {},
+      create: async (data) => {
+        const session = {
+          ...data,
+          _id: new Types.ObjectId(),
+          accountId: new Types.ObjectId(data.accountId),
+          generation: 0,
+          revokedAt: null,
+        };
+        sessions.push(session);
+        return session;
+      },
+      findOne: (filter) =>
+        query(sessions.find((session) => matches(session, filter)) ?? null),
+    },
+  },
+});
 
 class Note {
   constructor(data) {
@@ -271,6 +303,7 @@ const { default: app } = await import("../src/app.ts");
 
 beforeEach(() => {
   accounts.length = 0;
+  sessions.length = 0;
   notes.length = 0;
   collections.length = 0;
   tags.length = 0;
@@ -287,12 +320,21 @@ beforeEach(() => {
   generateQueryEmbedding.mock.mockImplementation(defaultEmbedding);
 });
 
+const client = request(app);
+const credentials = (action, payload, status) =>
+  submitCredentials(client, action, payload, status);
+
 async function register(email) {
-  const response = await request(app)
-    .post("/api/auth/register")
-    .send({ email, password: "password123", name: "Note Test User" })
-    .expect(201);
-  return `Bearer ${response.body.token}`;
+  const response = await credentials(
+    "register",
+    {
+      email,
+      password: "password123",
+      name: "Note Test User",
+    },
+    201,
+  );
+  return sessionHeaders(client, response);
 }
 
 test("subscription access is scoped to the account and requires an active Pro period", async () => {
@@ -312,7 +354,7 @@ test("subscription access is scoped to the account and requires an active Pro pe
   };
   subscriptions.push(subscription);
   const getSubscription = (auth) =>
-    request(app).get("/api/subscription").set("Authorization", auth);
+    request(app).get("/api/subscription").set(auth);
 
   const { usage: _ownerUsage, ...ownerSubscription } = (
     await getSubscription(owner).expect(200)
@@ -377,7 +419,7 @@ test("returns account-scoped usage and resets at the UTC month boundary", async 
   const path = "/api/subscription";
   const current = await request(app)
     .get(path)
-    .set("Authorization", owner)
+    .set(owner)
     .expect("Cache-Control", "no-store")
     .expect(200);
   assert.deepEqual(current.body.usage, {
@@ -389,7 +431,7 @@ test("returns account-scoped usage and resets at the UTC month boundary", async 
   const isolated = await request(app)
     .get(path)
     .query({ accountId })
-    .set("Authorization", other)
+    .set(other)
     .expect(200);
   assert.deepEqual(isolated.body.usage, {
     semanticSearchRequests: 0,
@@ -398,10 +440,7 @@ test("returns account-scoped usage and resets at the UTC month boundary", async 
   });
 
   t.mock.timers.setTime(Date.parse("2027-01-01T00:00:00.000Z"));
-  const reset = await request(app)
-    .get(path)
-    .set("Authorization", owner)
-    .expect(200);
+  const reset = await request(app).get(path).set(owner).expect(200);
   assert.deepEqual(reset.body.usage, {
     semanticSearchRequests: 0,
     noteEmbeddingRequests: 0,
@@ -413,26 +452,32 @@ test("rejects duplicate registration and incorrect login credentials", async () 
   const email = "registered@example.com";
   await register(email);
 
-  await request(app)
-    .post("/api/auth/register")
-    .send({ email, password: "password123", name: "Duplicate Account" })
-    .expect(400, { message: "Email đã tồn tại" });
+  const duplicate = await credentials(
+    "register",
+    {
+      email,
+      password: "password123",
+      name: "Duplicate Account",
+    },
+    400,
+  );
+  assert.deepEqual(duplicate.body, { message: "Email đã tồn tại" });
 
-  for (const credentials of [
+  for (const payload of [
     { email, password: "wrong-password" },
     { email: "missing@example.com", password: "password123" },
   ]) {
-    await request(app)
-      .post("/api/auth/login")
-      .send(credentials)
-      .expect(401, { message: "Email hoặc mật khẩu không đúng" });
+    const response = await credentials("login", payload, 401);
+    assert.deepEqual(response.body, {
+      message: "Email hoặc mật khẩu không đúng",
+    });
   }
 });
 
 async function createNote(auth, content = "Original content") {
   const response = await request(app)
     .post("/api/notes")
-    .set("Authorization", auth)
+    .set(auth)
     .send({ title: "Original title", content })
     .expect(201);
   return response.body;
@@ -444,40 +489,34 @@ test("rejects duplicate tag names and scopes deletion to the owner", async () =>
 
   const created = await request(app)
     .post("/api/tags")
-    .set("Authorization", owner)
+    .set(owner)
     .send({ name: "  Work  " })
     .expect(201);
   assert.equal(created.body.tag.name, "Work");
 
   await request(app)
     .post("/api/tags")
-    .set("Authorization", owner)
+    .set(owner)
     .send({ name: "Work" })
     .expect(409, { message: "Tag already exists." });
 
   const path = `/api/tags/${created.body.tag._id}`;
   await request(app)
     .delete(path)
-    .set("Authorization", other)
+    .set(other)
     .expect(404, { message: "Tag not found." });
   await request(app)
     .delete(path)
-    .set("Authorization", owner)
+    .set(owner)
     .expect(200, { message: "Tag deleted." });
 });
 
 function updateNote(auth, id, changes) {
-  return request(app)
-    .put(`/api/notes/${id}`)
-    .set("Authorization", auth)
-    .send(changes);
+  return request(app).put(`/api/notes/${id}`).set(auth).send(changes);
 }
 
 async function listNotes(auth) {
-  const response = await request(app)
-    .get("/api/notes")
-    .set("Authorization", auth)
-    .expect(200);
+  const response = await request(app).get("/api/notes").set(auth).expect(200);
   return response.body;
 }
 
@@ -487,26 +526,26 @@ test("rejects duplicate collection names and scopes updates to the owner", async
 
   const created = await request(app)
     .post("/api/collections")
-    .set("Authorization", owner)
+    .set(owner)
     .send({ name: "  Work  " })
     .expect(201);
   assert.equal(created.body.collection.name, "Work");
 
   await request(app)
     .post("/api/collections")
-    .set("Authorization", owner)
+    .set(owner)
     .send({ name: "Work" })
     .expect(409, { message: "Collection already exists." });
 
   const path = `/api/collections/${created.body.collection._id}`;
   await request(app)
     .put(path)
-    .set("Authorization", other)
+    .set(other)
     .send({ name: "Renamed" })
     .expect(404, { message: "Collection not found." });
   const updated = await request(app)
     .put(path)
-    .set("Authorization", owner)
+    .set(owner)
     .send({ description: "  Updated  " })
     .expect(200);
   assert.equal(updated.body.collection.name, "Work");
@@ -607,7 +646,7 @@ test("saves a failed content update and excludes its retained vector from search
 
   const search = await request(app)
     .post("/api/notes/search")
-    .set("Authorization", auth)
+    .set(auth)
     .send({ query: "searchable" })
     .expect(200);
   assert.deepEqual(
@@ -625,10 +664,7 @@ test("meters only requests that attempt semantic search or note embedding", asyn
   await updateNote(auth, note._id, { content: "Changed content" }).expect(200);
 
   const search = (body) =>
-    request(app)
-      .post("/api/notes/search")
-      .set("Authorization", auth)
-      .send(body);
+    request(app).post("/api/notes/search").set(auth).send(body);
   await search({ mode: "exact", query: "Changed content" }).expect(200);
   await search({ query: "" }).expect(400);
   generateQueryEmbedding.mock.mockImplementation(async () => null);
@@ -695,7 +731,7 @@ test("exact search matches literal punctuation across the owner's notes without 
   const search = (phrase) =>
     request(app)
       .post("/api/notes/search")
-      .set("Authorization", owner)
+      .set(owner)
       .send({ query: phrase, mode: "exact" });
 
   const response = await search(error.toLowerCase()).expect(200);
@@ -726,7 +762,7 @@ test("ranks semantic matches with a keyword bonus and excludes results outside t
 
   const { body } = await request(app)
     .post("/api/notes/search")
-    .set("Authorization", auth)
+    .set(auth)
     .send({ query: "orchids" })
     .expect(200);
 
@@ -764,31 +800,24 @@ test("saves the updated note when the embedding service rejects", async () => {
 });
 
 test("server API smoke flow", async () => {
-  const registerResponse = await request(app)
-    .post("/api/auth/register")
-    .send({
-      email: "smoke@example.com",
-      password: "password123",
-      name: "Smoke User",
-    })
-    .expect(201);
-
-  assert.equal(registerResponse.body.user.email, "smoke@example.com");
-  assert.ok(registerResponse.body.token);
+  const payload = {
+    email: "smoke@example.com",
+    password: "password123",
+    name: "Smoke User",
+  };
+  const registerResponse = await credentials("register", payload, 201);
+  assert.equal(registerResponse.body.user.email, payload.email);
+  assert.equal(registerResponse.body.token, undefined);
   assert.equal(registerResponse.headers["cache-control"], "no-store");
 
-  const loginResponse = await request(app)
-    .post("/api/auth/login")
-    .send({ email: "smoke@example.com", password: "password123" })
-    .expect(200);
-
-  const token = loginResponse.body.token;
-  assert.ok(token);
+  const loginResponse = await credentials("login", payload, 200);
+  assert.equal(loginResponse.body.token, undefined);
   assert.equal(loginResponse.headers["cache-control"], "no-store");
+  const auth = await sessionHeaders(client, loginResponse);
 
   const collectionResponse = await request(app)
     .post("/api/collections")
-    .set("Authorization", `Bearer ${token}`)
+    .set(auth)
     .send({ name: "Smoke Collection", description: "Smoke test data" })
     .expect(201);
 
@@ -796,7 +825,7 @@ test("server API smoke flow", async () => {
 
   const noteResponse = await request(app)
     .post("/api/notes")
-    .set("Authorization", `Bearer ${token}`)
+    .set(auth)
     .send({
       title: "Smoke note",
       content: "Smoke test content",
@@ -809,7 +838,7 @@ test("server API smoke flow", async () => {
 
   const listResponse = await request(app)
     .get("/api/notes")
-    .set("Authorization", `Bearer ${token}`)
+    .set(auth)
     .expect(200);
 
   assert.equal(listResponse.body.length, 1);
@@ -818,12 +847,12 @@ test("server API smoke flow", async () => {
 
   await request(app)
     .delete(`/api/notes/${noteResponse.body._id}`)
-    .set("Authorization", `Bearer ${token}`)
+    .set(auth)
     .expect(200);
 
   const emptyListResponse = await request(app)
     .get("/api/notes")
-    .set("Authorization", `Bearer ${token}`)
+    .set(auth)
     .expect(200);
 
   assert.deepEqual(emptyListResponse.body, []);
@@ -876,7 +905,7 @@ for (const [plan, allowance] of [
     const search = (mode) =>
       request(app)
         .post("/api/notes/search")
-        .set("Authorization", auth)
+        .set(auth)
         .send({ mode, query: "Original" });
 
     await search("semantic").expect(200);
@@ -911,7 +940,7 @@ test("returns search unavailable when plan lookup or quota storage fails", async
   const search = () =>
     request(app)
       .post("/api/notes/search")
-      .set("Authorization", auth)
+      .set(auth)
       .send({ query: "Original" })
       .expect(503, { message: "Tìm kiếm tạm thời không khả dụng" });
 
@@ -942,14 +971,11 @@ test("production hides mock billing routes and ignores persisted mock entitlemen
   });
 
   const base = "/api/mock-billing/checkouts";
-  await request(app).post(base).set("Authorization", auth).expect(404);
-  await request(app)
-    .get(`${base}/checkout`)
-    .set("Authorization", auth)
-    .expect(404);
+  await request(app).post(base).set(auth).expect(404);
+  await request(app).get(`${base}/checkout`).set(auth).expect(404);
   await request(app)
     .post(`${base}/checkout/actions`)
-    .set("Authorization", auth)
+    .set(auth)
     .send({ action: "succeed", expectedRevision: 0 })
     .expect(404);
   await request(app)
@@ -960,7 +986,7 @@ test("production hides mock billing routes and ignores persisted mock entitlemen
 
   const { body } = await request(app)
     .get("/api/subscription")
-    .set("Authorization", auth)
+    .set(auth)
     .expect(200);
   assert.equal(body.plan, "free");
   assert.equal(body.status, null);
@@ -971,10 +997,11 @@ test("bulk note import requires authentication and an effective Pro plan", async
   const item = { key: "note-1", title: "Example", content: "# Example" };
   const auth = await register("bulk-import@example.com");
   const submit = (items) =>
-    request(app).post(path).set("Authorization", auth).send({ notes: items });
+    request(app).post(path).set(auth).send({ notes: items });
 
   await request(app)
     .post(path)
+    .set("Origin", testOrigin)
     .send({ notes: [item] })
     .expect(401);
   await submit([item]).expect(403);
