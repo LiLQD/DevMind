@@ -13,6 +13,7 @@ const sendCommand = (command: string, ...args: string[]) =>
 export const generalLimiter = rateLimit({
   store: new RedisStore({
     sendCommand,
+    prefix: "devmind:rate-limit:general:",
   }),
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 200,
@@ -24,6 +25,7 @@ export const generalLimiter = rateLimit({
 export const searchLimiter = rateLimit({
   store: new RedisStore({
     sendCommand,
+    prefix: "devmind:rate-limit:search:",
   }),
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 50,
