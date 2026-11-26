@@ -1,3 +1,6 @@
+import FavoriteButton, {
+  type FavoriteControls,
+} from "../features/favorites/FavoriteButton";
 import { useId } from "react";
 import type { Note } from "../types";
 
@@ -5,7 +8,9 @@ type NoteItemProps = {
   note: Note;
   exactSearchQuery: string;
   isActive: boolean;
+  auxiliary?: boolean;
   onView: () => void;
+  favorites: FavoriteControls;
 };
 
 // Helper to format date as "Aug 23"
@@ -37,7 +42,9 @@ export default function NoteItem({
   note,
   exactSearchQuery,
   isActive,
+  auxiliary,
   onView,
+  favorites,
 }: NoteItemProps) {
   const metadataId = useId();
   const pattern = exactSearchQuery
@@ -75,8 +82,8 @@ export default function NoteItem({
       <button
         className="note-open"
         type="button"
-        aria-current={isActive ? "true" : undefined}
-        aria-label={note.title}
+        aria-current={isActive && !auxiliary ? "true" : undefined}
+        aria-label={auxiliary ? `Open favorite: ${note.title}` : note.title}
         aria-describedby={metadataId}
         onClick={onView}
       >
@@ -101,15 +108,7 @@ export default function NoteItem({
           )}
         </span>
       </button>
-      <button
-        type="button"
-        className="favorite-star"
-        disabled
-        title="Coming soon"
-        aria-label="Favorite, coming soon"
-      >
-        ☆
-      </button>
+      <FavoriteButton note={note} controls={favorites} row />
     </div>
   );
 }

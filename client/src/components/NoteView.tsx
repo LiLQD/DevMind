@@ -1,3 +1,6 @@
+import FavoriteButton, {
+  type FavoriteControls,
+} from "../features/favorites/FavoriteButton";
 import type { Note } from "../types";
 import Disclosure from "../features/workspace/Disclosure";
 import {
@@ -20,6 +23,7 @@ type NoteViewProps = {
   onEditNote: (note: Note) => void;
   onDeleteNote: (note: Note) => void;
   deletingNoteId: string | null;
+  favorites: FavoriteControls;
 };
 
 export default function NoteView({
@@ -30,6 +34,7 @@ export default function NoteView({
   onEditNote,
   onDeleteNote,
   deletingNoteId,
+  favorites,
 }: NoteViewProps) {
   if (isLoadingNote) {
     return (
@@ -70,6 +75,7 @@ export default function NoteView({
     >
       <header className="editorial-header">
         <div className="note-header-actions">
+          <FavoriteButton note={selectedNote} controls={favorites} />
           <button
             type="button"
             className="secondary-btn"

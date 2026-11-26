@@ -6,6 +6,7 @@ import request from "supertest";
 import {
   configureTestCookies,
   sessionHeaders,
+  testOrigin,
   submitCredentials,
 } from "../test-support/cookie-fixture.js";
 
@@ -517,6 +518,97 @@ test(
           client.get(`${notesPath}/${noteId}`),
         ).expect(200);
         assert.deepEqual(body.tags, []);
+      },
+    );
+    await t.test(
+      "favorites are scoped, idempotent and leave note timestamps and embeddings intact",
+      async () => {
+        const { body: firstNote } = await authorized(client.post(notesPath))
+          .send({
+            title: "Favorite ordering first",
+            content: "favorite fixture",
+          })
+          .expect(201);
+        const { body: nextNote } = await authorized(client.post(notesPath))
+          .send({
+            title: "Favorite ordering second",
+            content: "favorite fixture second",
+          })
+          .expect(201);
+        const path = `${notesPath}/${firstNote._id}/favorite`;
+        const listFavorites = () =>
+          authorized(client.get(notesPath).query({ favorite: "true" }));
+        await listFavorites().expect(200, []);
+        await client
+          .put(path)
+          .set("Origin", testOrigin)
+          .send({ favorite: true })
+          .expect(401);
+        await asOther(client.put(path)).send({ favorite: true }).expect(404);
+        await authorized(client.put(`${notesPath}/bad-id/favorite`))
+          .send({ favorite: true })
+          .expect(400);
+        for (const body of [
+          {},
+          { favorite: "true" },
+          { favorite: true, title: "changed" },
+        ]) {
+          await authorized(client.put(path)).send(body).expect(400);
+        }
+        const before = await Note.collection.findOne({
+          _id: new mongoose.Types.ObjectId(firstNote._id),
+        });
+        const replies = await Promise.all(
+          Array.from({ length: 4 }, () =>
+            authorized(client.put(path)).send({ favorite: true }).expect(200),
+          ),
+        );
+        const { favoritedAt } = replies[0].body;
+        assert.ok(favoritedAt);
+        assert.ok(
+          replies.every(({ body }) => body.favoritedAt === favoritedAt),
+        );
+        const { favoritedAt: stored, ...after } = await Note.collection.findOne(
+          { _id: before._id },
+        );
+        assert.equal(stored.toISOString(), favoritedAt);
+        assert.deepEqual(after, before);
+        const { body: secondFavorite } = await authorized(
+          client.put(`${notesPath}/${nextNote._id}/favorite`),
+        )
+          .send({ favorite: true })
+          .expect(200);
+        assert.ok(secondFavorite.favoritedAt >= favoritedAt);
+        const { body: list } = await listFavorites().expect(200);
+        assert.deepEqual(
+          list.map(({ _id }) => _id),
+          [nextNote._id, firstNote._id],
+        );
+        await asOther(client.get(notesPath).query({ favorite: "true" })).expect(
+          200,
+          [],
+        );
+        const { body: detail } = await authorized(
+          client.get(`${notesPath}/${firstNote._id}`),
+        ).expect(200);
+        assert.equal(detail.favoritedAt, favoritedAt);
+        const { body: exact } = await authorized(client.post(searchPath))
+          .send({ query: "Favorite ordering first", mode: "exact" })
+          .expect(200);
+        assert.equal(exact.results[0].favoritedAt, favoritedAt);
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          await authorized(client.put(path))
+            .send({ favorite: false })
+            .expect(200, { favoritedAt: null });
+        }
+        assert.deepEqual(
+          await Note.collection.findOne({ _id: before._id }),
+          before,
+        );
+        assert.deepEqual(
+          (await listFavorites().expect(200)).body.map(({ _id }) => _id),
+          [nextNote._id],
+        );
       },
     );
   },

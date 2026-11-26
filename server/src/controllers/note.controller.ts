@@ -23,7 +23,7 @@ type NoteBody = {
   collections?: unknown;
   collection?: unknown;
 };
-type NoteFilters = { tagId?: string; collectionId?: string };
+type NoteFilters = { favorite?: string; tagId?: string; collectionId?: string };
 type NoteParams = { id: string };
 type RouteParams = Request["params"];
 
@@ -112,7 +112,8 @@ export const getNotes: RequestHandler<
   NoteFilters
 > = async (req, res) => {
   try {
-    const { tagId, collectionId } = req.query;
+    const { tagId, collectionId, favorite } = req.query;
+    const favoritesOnly = favorite === "true";
     const userId = req.user!.id;
     if (
       collectionId !== undefined &&
@@ -133,13 +134,15 @@ export const getNotes: RequestHandler<
     const query = {
       userId,
       ...(tagId ? { tags: tagId } : {}),
+      ...(favoritesOnly ? { favoritedAt: { $type: "date" as const } } : {}),
       ...(collectionId ? { collections: collectionId } : {}),
     };
 
     const notes = await Note.find(query)
       .select(noteResponseProjection)
       .populate(noteMetadataPopulation(userId))
-      .sort({ createdAt: -1 });
+      // oxlint-disable-next-line unicorn/no-array-sort -- Mongoose query ordering.
+      .sort(favoritesOnly ? { favoritedAt: -1, _id: -1 } : { createdAt: -1 });
 
     res.json(notes);
   } catch (error) {
