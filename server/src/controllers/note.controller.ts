@@ -1,4 +1,5 @@
 import type { Request, RequestHandler } from "express";
+import { isObjectIdOrHexString, mongo } from "mongoose";
 import type { Types } from "mongoose";
 import Tag from "../models/Tag.ts";
 import Note from "../models/Note.ts";
@@ -34,14 +35,27 @@ const resolveTagIds = async (
   const unique = [
     ...new Set((names || []).map((n) => String(n).trim()).filter(Boolean)),
   ];
+  if (!unique.length) return [];
+  await Tag.init();
   const ids = [];
   for (const name of unique) {
-    const tag = await Tag.findOneAndUpdate(
-      { name, userId },
-      { $setOnInsert: { name, userId } },
-      { upsert: true, returnDocument: "after" },
-    );
-    ids.push(tag!._id);
+    const identity = { name, userId };
+    try {
+      const tag = await Tag.findOneAndUpdate(
+        identity,
+        { $setOnInsert: identity },
+        { upsert: true, returnDocument: "after", requireFilter: true },
+      ).orFail();
+      ids.push(tag._id);
+    } catch (error) {
+      if (!(error instanceof mongo.MongoServerError) || error.code !== 11000) {
+        throw error;
+      }
+      // A concurrent insert may already have created this account's tag.
+      const winner = await Tag.exists(identity);
+      if (!winner) throw error;
+      ids.push(winner._id);
+    }
   }
   return ids;
 };
@@ -106,6 +120,13 @@ export const getNotes: RequestHandler<
         { collections: [collectionId] },
         userId,
       )) === null
+    ) {
+      return res.json([]);
+    }
+    if (
+      tagId !== undefined &&
+      (!isObjectIdOrHexString(tagId) ||
+        !(await Tag.exists({ _id: tagId, userId })))
     ) {
       return res.json([]);
     }

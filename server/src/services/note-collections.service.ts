@@ -37,5 +37,8 @@ export async function resolveNoteCollections(
 export function noteMetadataPopulation(
   userId: Types.ObjectId,
 ): PopulateOptions[] {
-  return [{ path: "tags" }, { path: "collections", match: { userId } }];
+  return [
+    { path: "tags", match: { userId } },
+    { path: "collections", match: { userId } },
+  ];
 }
