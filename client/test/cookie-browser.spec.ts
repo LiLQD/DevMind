@@ -164,13 +164,16 @@ test("two tabs share one refresh and logout updates both", async ({
   await expireAccess(context);
   await Promise.all(
     [page, other].map(async (tab) => {
-      await tab.getByRole("button", { name: "Export Markdown" }).click();
+      await tab.getByRole("button", { name: "Account menu" }).click();
+      await tab.getByRole("button", { name: "Export all notes" }).click();
       await expect(tab.getByText("No notes to export.")).toBeVisible();
     }),
   );
   expect(refreshes).toBe(1);
 
-  await page.getByRole("button", { name: "Logout" }).click();
+  await page.getByRole("button", { name: "Account menu" }).click();
+
+  await page.getByRole("button", { name: "Log out" }).click();
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   await expect(other.getByRole("heading", { name: "Sign in" })).toBeVisible();
   expect((await context.cookies(origin)).map(({ name }) => name)).not.toContain(
@@ -219,7 +222,8 @@ test("signing into another account keeps the old draft and workspace out of view
   await draft(page);
   const other = await context.newPage();
   await other.goto(origin);
-  await other.getByRole("button", { name: "Logout" }).click();
+  await other.getByRole("button", { name: "Account menu" }).click();
+  await other.getByRole("button", { name: "Log out" }).click();
   const emailB = await register(other, "Account B");
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   await expect(page.getByText("Preserve this draft.")).toHaveCount(0);
@@ -252,7 +256,8 @@ test("continues after a lost refresh response when the browser received the succ
     };
   });
   await expireAccess(context);
-  await page.getByRole("button", { name: "Export Markdown" }).click();
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("button", { name: "Export all notes" }).click();
   await expect(page.getByText("No notes to export.")).toBeVisible();
   await expect(page.getByText("Cookie User", { exact: true })).toBeVisible();
 });
@@ -314,7 +319,9 @@ test("keeps the workspace locked until sign-out can be confirmed", async ({
     times: 1,
   });
 
-  await page.getByRole("button", { name: "Logout" }).click();
+  await page.getByRole("button", { name: "Account menu" }).click();
+
+  await page.getByRole("button", { name: "Log out" }).click();
   await expect(page.getByRole("alert")).toHaveText(
     "Could not confirm sign-out.",
   );

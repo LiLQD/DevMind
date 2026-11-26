@@ -88,11 +88,13 @@ test("suggests organization for an imported Markdown draft and applies choices i
     await route.fulfill({ json: suggestions });
   });
   await openDraft(page, false);
-  await page.locator('input[type="file"][accept=".md"]').setInputFiles({
-    name: "Redis troubleshooting.md",
-    mimeType: "text/markdown",
-    buffer: Buffer.from("# Redis troubleshooting\n\nCounter expiry fix"),
-  });
+  await page
+    .locator('.create-panel input[type="file"][accept=".md"]')
+    .setInputFiles({
+      name: "Redis troubleshooting.md",
+      mimeType: "text/markdown",
+      buffer: Buffer.from("# Redis troubleshooting\n\nCounter expiry fix"),
+    });
   const tags = page.getByLabel("Tags");
   await tags.fill("manual");
   await page.getByRole("button", { name: suggestLabel }).click();
@@ -197,7 +199,8 @@ test("discards a response from the previous account after switching sessions", a
     await openDraft(page);
     await page.getByRole("button", { name: suggestLabel }).click();
     await started.promise;
-    await page.getByRole("button", { name: "Logout" }).click();
+    await page.getByRole("button", { name: "Account menu" }).click();
+    await page.getByRole("button", { name: "Log out" }).click();
     await page.getByRole("button", { name: "Discard changes" }).click();
     await page.getByLabel("Email").fill("b@example.test");
     await page.getByLabel("Password").fill("example-password");

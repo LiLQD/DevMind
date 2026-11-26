@@ -1,5 +1,6 @@
 import type { FormEventHandler, Ref } from "react";
 import type { SearchMode } from "../types";
+import WorkspaceIcon from "../features/workspace/WorkspaceIcon";
 
 type SearchBarProps = {
   mode: SearchMode;
@@ -34,6 +35,9 @@ export default function SearchBar({
           Search notes
         </label>
         <div className="search-bar-input-wrap">
+          <span className="search-field-icon">
+            <WorkspaceIcon name="search" />
+          </span>
           <input
             id="notes-search"
             ref={searchInputRef}
@@ -80,13 +84,6 @@ export default function SearchBar({
           {isSearchingAI ? "Searching…" : "Search"}
         </button>
       </form>
-      <div className="search-bar-meta">
-        <div className="search-bar-shortcuts">
-          <span>
-            <kbd>⌘/Ctrl K</kbd> focus
-          </span>
-        </div>
-      </div>
     </div>
   );
 }
