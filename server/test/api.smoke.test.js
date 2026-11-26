@@ -3,7 +3,7 @@ import { beforeEach, mock, test } from "node:test";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import request from "supertest";
-import { Types } from "mongoose";
+import { mongo, Types } from "mongoose";
 import {
   configureTestCookies,
   sessionHeaders,
@@ -248,7 +248,19 @@ class Tag {
   }
 
   async save() {
+    if (await Tag.exists({ name: this.name, userId: this.userId })) {
+      throw new mongo.MongoServerError({
+        code: 11000,
+        message: "duplicate tag",
+      });
+    }
     tags.push(this);
+  }
+
+  static async init() {}
+
+  static async exists(filter) {
+    return tags.find((tag) => matches(tag, filter)) ?? null;
   }
 
   static find(filter) {
