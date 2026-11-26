@@ -252,6 +252,27 @@ Authentication uses same-origin cookies. Keep the existing cookie secrets and se
 6. Before enabling production, complete a real Google sign-in on the explicitly configured development or staging origin. Check that the browser returns to DevMind and that reload and logout work. Verify MongoDB has the unique partial index on `accounts.identities.google` and that Redis supports `GETDEL` (Redis 6.2 or later). Mongoose builds the additive index on schema initialization. Deployments with automatic index creation disabled must provision this specific index before enabling Google. Publish the production OAuth app when ready, then set `GOOGLE_AUTH_ENABLED=true` on Render and redeploy.
 7. To roll back Google sign-in, set `GOOGLE_AUTH_ENABLED=false` and redeploy Render. Existing DevMind sessions and password sign-in continue to work. Provider-only accounts need Google enabled again to start a new session.
 
+### Optional GitHub sign-in
+
+Create a GitHub OAuth App for each environment. DevMind requests only `user:email` and uses the numeric GitHub user ID to identify the account. Signing in with an email already used by DevMind requires using the existing sign-in method first, then choosing **Connect GitHub** in **Sign-in methods**.
+
+| Environment | Homepage URL                       | Authorization callback URL                                  |
+| ----------- | ---------------------------------- | ----------------------------------------------------------- |
+| Local Vite  | `http://localhost:5173`            | `http://localhost:5173/api/auth/github/callback`            |
+| Hosted demo | `https://dev-mind-nine.vercel.app` | `https://dev-mind-nine.vercel.app/api/auth/github/callback` |
+
+Set the following variables in the local server's ignored environment file or in the hosted backend's environment. Add the exact homepage origin to `COOKIE_AUTH_ORIGINS`. Leave the feature disabled until the OAuth App is configured.
+
+| Variable                    | Value                                                         |
+| --------------------------- | ------------------------------------------------------------- |
+| `GITHUB_AUTH_ENABLED`       | Set to `true` to enable GitHub sign-in. Defaults to disabled. |
+| `GITHUB_AUTH_CLIENT_ID`     | OAuth App client ID.                                          |
+| `GITHUB_AUTH_CLIENT_SECRET` | OAuth App client secret. Store only on the backend.           |
+| `GITHUB_AUTH_APP_ORIGIN`    | Exact homepage origin from the table for the environment.     |
+| `GITHUB_AUTH_CALLBACK_URI`  | Exact registered authorization callback URL.                  |
+
+Before enabling GitHub in production, verify Redis supports `GETDEL` and MongoDB has the unique partial index on `accounts.identities.github`. If automatic index creation is disabled, provision that index before enabling the provider. Check that hosted logs omit callback query strings and cookie headers. Smoke-test GitHub sign-in, reload, logout, and explicit linking with an existing account. To roll back, set `GITHUB_AUTH_ENABLED=false` and redeploy the backend. Accounts with GitHub as their only sign-in method need GitHub enabled to start a new session.
+
 ## 📡 API Overview
 
 ---

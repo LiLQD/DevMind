@@ -12,6 +12,7 @@ const accountSchema = new mongoose.Schema(
     password: { type: String },
     identities: {
       google: { type: String, select: false },
+      github: { type: String, select: false },
     },
     name: {
       type: String,
@@ -37,6 +38,14 @@ accountSchema.index(
   {
     unique: true,
     partialFilterExpression: { "identities.google": { $type: "string" } },
+  },
+);
+
+accountSchema.index(
+  { "identities.github": 1 },
+  {
+    unique: true,
+    partialFilterExpression: { "identities.github": { $type: "string" } },
   },
 );
 
