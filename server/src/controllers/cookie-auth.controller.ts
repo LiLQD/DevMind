@@ -10,6 +10,7 @@ import {
 } from "../services/auth-session.service.ts";
 import {
   clearCredentialProof,
+  clearGoogleBinding,
   clearSessionCookies,
   credentialProof,
   readAccessCookie,
@@ -32,6 +33,7 @@ export async function startCookieSession(
   const session = await createAuthSession(user.id);
   if (!session) return authFailure(res, "AUTH_REQUIRED");
   clearCredentialProof(res);
+  clearGoogleBinding(res);
   setSessionCookies(res, session);
   return res.status(status).json({ user });
 }

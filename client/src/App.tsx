@@ -1,3 +1,4 @@
+import SignInMethods from "./features/auth/SignInMethods";
 import { useFavorites } from "./features/favorites/useFavorites";
 import {
   useEffect,
@@ -34,6 +35,9 @@ import BulkImportPanel from "./features/bulk-import/BulkImportPanel";
 import SearchBar from "./components/SearchBar";
 import {
   authenticateCookieSession,
+  followGoogleAuthorization,
+  googleSignInAvailable,
+  startGoogleSignIn,
   CookieAuthError,
   cookieSessionChannel,
   cookieWorkspaceRequest,
@@ -110,6 +114,13 @@ function authResponseError(status: number, message: string, isLogin: boolean) {
     : "Unable to create your account. Please try again.";
 }
 
+const googleReturnErrors: Record<string, string> = {
+  cancelled: "Google sign-in was cancelled. You can try again.",
+  invalid: "Google could not verify this sign-in. Start again.",
+  unavailable:
+    "Google sign-in is temporarily unavailable. Try again or use your password.",
+};
+
 function App() {
   // --- Auth ---
   const [{ cookie, requests }, setSession] = useState(() => ({
@@ -125,6 +136,15 @@ function App() {
   const cookieChannelRef = useRef<BroadcastChannel | null>(null);
   const logoutTargetRef = useRef<CookieSession | null>(null);
   const draftOwnerRef = useRef<string | null>(null);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+  const [googlePending, setGooglePending] = useState(false);
+  const [googleReturn, setGoogleReturn] = useState(() =>
+    new URL(window.location.href).searchParams.get("google"),
+  );
+  const [googleFeedback, setGoogleFeedback] = useState("");
+  const [showSignInMethods, setShowSignInMethods] = useState(false);
+  const googleFinish = useRef<Promise<CookieSession> | null>(null);
+
   const [authError, setAuthError] = useState("");
   const [isAuthPending, setIsAuthPending] = useState(false);
   const authPendingRef = useRef(false);
@@ -308,6 +328,48 @@ function App() {
 
   const favorites = useFavorites(sessionKey, sessionSignal, apiRequest);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    void googleSignInAvailable(controller.signal).then(
+      (enabled) => {
+        if (!controller.signal.aborted) setGoogleEnabled(enabled);
+      },
+      () => {},
+    );
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("google")) {
+      url.searchParams.delete("google");
+      window.history.replaceState(
+        window.history.state,
+        "",
+        url.pathname + url.search + url.hash,
+      );
+    }
+    return () => controller.abort();
+  }, []);
+
+  const continueWithGoogle = async () => {
+    if (authPendingRef.current) return;
+    authPendingRef.current = true;
+    setIsAuthPending(true);
+    setGooglePending(true);
+    setGoogleReturn(null);
+    setGoogleFeedback("");
+    setAuthError("");
+    try {
+      followGoogleAuthorization(await startGoogleSignIn());
+    } catch (error) {
+      setGoogleFeedback(
+        error instanceof CookieAuthError
+          ? error.message
+          : "Google sign-in could not be started. Try again.",
+      );
+      authPendingRef.current = false;
+      setIsAuthPending(false);
+      setGooglePending(false);
+    }
+  };
+
   // --- Auth handlers ---
   const handleAuth = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -319,6 +381,8 @@ function App() {
 
     authPendingRef.current = true;
     setIsAuthPending(true);
+    setGoogleReturn(null);
+    setGoogleFeedback("");
     setAuthError("");
     try {
       const endpoint = isLogin ? "/auth/login" : "/auth/register";
@@ -356,6 +420,9 @@ function App() {
   const clearWorkspace = (preserveDraftFor?: string) => {
     requests.abort();
     setBulkImportAccess(null);
+    setShowSignInMethods(false);
+    setGoogleReturn(null);
+    setGoogleFeedback("");
     noteRequestRef.current++;
     draftOwnerRef.current = preserveDraftFor ?? null;
     if (!preserveDraftFor) resetEditor();
@@ -410,6 +477,29 @@ function App() {
   };
 
   const restoreSession = async (signal: AbortSignal) => {
+    if (googleReturn === "sign-in" && !googleFeedback) {
+      googleFinish.current ??= authenticateCookieSession(
+        "/auth/google/finish-sign-in",
+        {},
+      );
+      try {
+        const current = await googleFinish.current;
+        if (signal.aborted) return;
+        adoptCookieSession(current);
+        cookieChannelRef.current?.postMessage("session-changed");
+        setGoogleReturn(null);
+        setCookieAction(null);
+        return;
+      } catch (error) {
+        if (signal.aborted) return;
+        setGoogleFeedback(
+          error instanceof CookieAuthError
+            ? error.message
+            : "Could not complete Google sign-in. Start again.",
+        );
+        setGoogleReturn(null);
+      }
+    }
     try {
       const current = await restoreCookieSession(signal);
       if (signal.aborted) return;
@@ -1066,9 +1156,24 @@ function App() {
           setAuthError("");
           setIsLogin((value) => !value);
         }}
-        error={authError}
+        error={
+          authError ||
+          googleFeedback ||
+          (googleReturn === "connect"
+            ? "Sign in to the original DevMind account before connecting Google again."
+            : googleReturn && Object.hasOwn(googleReturnErrors, googleReturn)
+              ? googleReturnErrors[googleReturn]
+              : "")
+        }
+        googleEnabled={googleEnabled}
+        googlePending={googlePending}
+        onGoogleSignIn={() => void continueWithGoogle()}
         isPending={isAuthPending}
-        onEdit={() => setAuthError("")}
+        onEdit={() => {
+          setAuthError("");
+          setGoogleFeedback("");
+          setGoogleReturn(null);
+        }}
         email={email}
         setEmail={setEmail}
         password={password}
@@ -1120,6 +1225,7 @@ function App() {
       onExport={exportNotes}
       exporting={isExportingNotes}
       onLogout={() => leaveEditor(handleLogout)}
+      onSignInMethods={() => setShowSignInMethods(true)}
       planControl={
         <PlanPanel
           apiRequest={apiRequest}
@@ -1146,6 +1252,31 @@ function App() {
         notification={notification}
         onDismiss={() => setNotification(null)}
       />
+      {(showSignInMethods ||
+        googleReturn === "connect" ||
+        (googleReturn !== null &&
+          Object.hasOwn(googleReturnErrors, googleReturn)) ||
+        googleFeedback) && (
+        <SignInMethods
+          key={`sign-in-methods:${sessionKey}`}
+          apiRequest={apiRequest}
+          signal={sessionSignal}
+          enabled={googleEnabled}
+          callback={googleReturn === "connect"}
+          feedback={
+            googleFeedback ||
+            (googleReturn && Object.hasOwn(googleReturnErrors, googleReturn)
+              ? googleReturnErrors[googleReturn]
+              : undefined)
+          }
+          onConnect={leaveEditor}
+          onClose={() => {
+            setShowSignInMethods(false);
+            setGoogleReturn(null);
+            setGoogleFeedback("");
+          }}
+        />
+      )}
       {favorites.failure && (
         <div role="alert" className="favorites-mutation-feedback">
           <span>{favorites.failure}</span>
