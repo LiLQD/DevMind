@@ -42,11 +42,7 @@ export default function SearchBar({
             id="notes-search"
             ref={searchInputRef}
             type="text"
-            placeholder={
-              mode === "exact"
-                ? "Paste an error or phrase"
-                : "Describe the problem or fix"
-            }
+            placeholder="Search your notes..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="search-bar-input"
@@ -64,18 +60,25 @@ export default function SearchBar({
             </button>
           )}
         </div>
-        <select
-          className="search-bar-mode"
+        <div
+          className="search-segments"
+          role="radiogroup"
           aria-label="Search mode"
-          value={mode}
-          onChange={(event) =>
-            setMode(event.target.value === "exact" ? "exact" : "semantic")
-          }
-          disabled={isSearchingAI}
         >
-          <option value="semantic">By meaning</option>
-          <option value="exact">Exact text</option>
-        </select>
+          {(["semantic", "exact"] as const).map((option) => (
+            <label key={option}>
+              <input
+                type="radio"
+                name="search-mode"
+                value={option}
+                checked={mode === option}
+                onChange={() => setMode(option)}
+                disabled={isSearchingAI}
+              />
+              <span>{option === "semantic" ? "Semantic" : "Exact"}</span>
+            </label>
+          ))}
+        </div>
         <button
           type="submit"
           className="search-bar-submit"

@@ -1,3 +1,4 @@
+import WorkspaceIcon from "../features/workspace/WorkspaceIcon";
 import { useRef, useState } from "react";
 
 type Checkout = {
@@ -162,7 +163,7 @@ export default function PlanPanel({
   return (
     <>
       <button type="button" className="topbar-button" onClick={open}>
-        {triggerLabel}
+        <WorkspaceIcon name="plan" /> {triggerLabel}
       </button>
       <dialog
         ref={dialogRef}
