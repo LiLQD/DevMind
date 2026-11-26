@@ -1,3 +1,4 @@
+import { useFavorites } from "./features/favorites/useFavorites";
 import {
   useEffect,
   useEffectEvent,
@@ -16,6 +17,7 @@ import WorkspaceShell, {
   mobileWorkspace,
 } from "./features/workspace/WorkspaceShell";
 import NavigationSidebar, {
+  favoritesFilter,
   uncategorized,
 } from "./features/workspace/NavigationSidebar";
 import AccountMenu from "./features/workspace/AccountMenu";
@@ -134,6 +136,7 @@ function App() {
 
   // --- Data ---
   const [notes, setNotes] = useState<Note[]>([]);
+  const [favoritesView, setFavoritesView] = useState(false);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [relatedNotes, setRelatedNotes] = useState<Note[]>([]);
   const [searchResults, setSearchResults] = useState<Note[]>([]);
@@ -303,6 +306,8 @@ function App() {
     }
   };
 
+  const favorites = useFavorites(sessionKey, sessionSignal, apiRequest);
+
   // --- Auth handlers ---
   const handleAuth = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -364,6 +369,7 @@ function App() {
     setSession({ cookie: null, requests: new AbortController() });
     setUser(null);
     setCompleteNotes(null);
+    setFavoritesView(false);
     importingFile.current = false;
     browseRequest.current += 1;
     if (notificationTimerRef.current)
@@ -657,6 +663,7 @@ function App() {
       const updated = unwrapResource<Note, "note">(data, "note");
       if (selectedNote?._id !== updated._id) setRelatedNotes([]);
       setSelectedNote(updated);
+      favorites.updateNote(updated);
       setSearchResults((results) =>
         results.map((note) =>
           note._id === updated._id ? { ...note, ...updated } : note,
@@ -679,6 +686,7 @@ function App() {
     setDeletingNoteId(targetId);
     try {
       await apiRequest(`/notes/${targetId}`, { method: "DELETE" });
+      favorites.remove(targetId);
       if (selectedNote?._id === targetId) {
         noteRequestRef.current++;
         setIsLoadingNote(false);
@@ -1073,7 +1081,17 @@ function App() {
   }
 
   // --- Main app ---
-  const displayNotes = isSearching ? searchResults : notes;
+  const displayNotes = isSearching
+    ? searchResults
+    : favoritesView
+      ? favorites.favorites
+      : notes;
+  const browseFilter = (id: string | null) => {
+    setIsSearching(false);
+    setFavoritesView(id === favoritesFilter);
+    if (id !== favoritesFilter) setSelectedCollectionFilter(id);
+    showBrowse();
+  };
   const plan =
     bulkImportAccess?.sessionKey === sessionKey
       ? bulkImportAccess.plan
@@ -1128,6 +1146,18 @@ function App() {
         notification={notification}
         onDismiss={() => setNotification(null)}
       />
+      {favorites.failure && (
+        <div role="alert" className="favorites-mutation-feedback">
+          <span>{favorites.failure}</span>
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={favorites.dismissFailure}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       <input
         ref={importFileRef}
         type="file"
@@ -1160,12 +1190,14 @@ function App() {
           <NavigationSidebar
             collections={collections}
             counts={counts}
-            active={isSearching ? null : selectedCollectionFilter}
-            onFilter={(id) => {
-              setIsSearching(false);
-              setSelectedCollectionFilter(id);
-              showBrowse();
-            }}
+            active={
+              favoritesView
+                ? favoritesFilter
+                : isSearching
+                  ? null
+                  : selectedCollectionFilter
+            }
+            onFilter={browseFilter}
             onCreate={createCollection}
             account={account}
             onImport={() => importFileRef.current?.click()}
@@ -1183,9 +1215,25 @@ function App() {
         browse={
           <Sidebar
             notes={displayNotes}
+            favorites={favorites}
+            favoritesView={favoritesView}
+            recentFavorites={
+              !favoritesView && !isSearching && !selectedCollectionFilter
+                ? favorites.favorites
+                : undefined
+            }
+            favoritesError={favorites.loadError}
+            favoritesLoading={favorites.loading}
+            onRetryFavorites={favorites.retryLoad}
+            onShowFavorites={() => browseFilter(favoritesFilter)}
+            onBrowseNotes={() => browseFilter(null)}
             exactSearchQuery={isSearching ? exactSearchQuery : ""}
             selectedNoteId={editor?.note?._id ?? selectedNote?._id}
-            isLoading={isLoadingNotes && displayNotes.length === 0}
+            isLoading={
+              !isSearching &&
+              (favoritesView ? favorites.loading : isLoadingNotes) &&
+              displayNotes.length === 0
+            }
             isSearching={isSearching}
             searchMode={searchMode}
             noteListRef={noteListRef}
@@ -1261,6 +1309,7 @@ function App() {
           ) : (
             <NoteView
               selectedNote={selectedNote}
+              favorites={favorites}
               isLoadingNote={isLoadingNote}
               onCreateNote={() => beginEditor()}
               hasNotes={notes.length > 0 || Boolean(selectedCollectionFilter)}

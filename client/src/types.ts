@@ -15,6 +15,7 @@ export type Note = {
   content: string;
   createdAt: string;
   updatedAt?: string;
+  favoritedAt?: string | null;
   embeddingStatus?: "success" | "failed" | "pending";
   tags?: Tag[];
   collections?: Collection[];
