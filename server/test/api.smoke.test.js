@@ -927,6 +927,7 @@ test("serves security headers and rejects unknown CORS origins", async () => {
 
   assert.equal(response.headers["x-content-type-options"], "nosniff");
   assert.equal(response.headers["access-control-allow-origin"], undefined);
+  assert.equal(response.headers["ratelimit-limit"], undefined);
   await request(app)
     .get("/api/notes")
     .expect(401)
