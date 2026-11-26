@@ -2,6 +2,8 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { isObjectIdOrHexString, Types } from "mongoose";
+import { githubAuth } from "../config/github-auth.ts";
+import type { OAuthProvider } from "./oauth-account.service.ts";
 import { googleAuth } from "../config/google-auth.ts";
 import { cookieAuth } from "../config/cookie-auth.ts";
 import type { createAuthSession } from "./auth-session.service.ts";
@@ -20,7 +22,7 @@ const options = {
 const prefix = options.secure ? "__Host-devmind-" : "devmind-";
 const accessName = `${prefix}access`;
 const refreshName = `${prefix}refresh`;
-const googleName = `${prefix}google`;
+const bindingName = (provider: OAuthProvider) => `${prefix}${provider}`;
 const preAuthName = `${prefix}csrf`;
 
 function readCookie(req: Request, name: string) {
@@ -32,21 +34,22 @@ function readCookie(req: Request, name: string) {
   return matches?.length === 1 ? matches[0].slice(field.length) : undefined;
 }
 
-export function readGoogleBinding(req: Request) {
-  const value = readCookie(req, googleName);
+export function readOAuthBinding(req: Request, provider: OAuthProvider) {
+  const value = readCookie(req, bindingName(provider));
   return value && noncePattern.test(value) ? value : undefined;
 }
 
-export function setGoogleBinding(
+export function setOAuthBinding(
   res: Response,
+  provider: OAuthProvider,
   binding: string,
   maxAge: number,
 ) {
-  res.cookie(googleName, binding, { ...options, maxAge });
+  res.cookie(bindingName(provider), binding, { ...options, maxAge });
 }
 
-export function clearGoogleBinding(res: Response) {
-  if (googleAuth) res.clearCookie(googleName, options);
+export function clearOAuthBinding(res: Response, provider: OAuthProvider) {
+  res.clearCookie(bindingName(provider), options);
 }
 
 export function readRefreshCookie(req: Request) {
@@ -110,8 +113,13 @@ export function setSessionCookies(
   });
 }
 
+export function clearOAuthBindings(res: Response) {
+  if (googleAuth) clearOAuthBinding(res, "google");
+  if (githubAuth) clearOAuthBinding(res, "github");
+}
+
 export function clearSessionCookies(res: Response) {
-  clearGoogleBinding(res);
+  clearOAuthBindings(res);
   res.clearCookie(accessName, options);
   res.clearCookie(refreshName, options);
 }

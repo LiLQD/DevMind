@@ -1,7 +1,16 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import { followGoogleAuthorization } from "./cookie-session";
+import {
+  followOAuthAuthorization,
+  oauthProviders,
+  oauthProviderNames,
+  type OAuthProvider,
+} from "./cookie-session";
 
-type Methods = { passwordConfigured: boolean; googleConnected: boolean };
+type Methods = {
+  passwordConfigured: boolean;
+  googleConnected: boolean;
+  githubConnected?: boolean;
+};
 
 export default function SignInMethods({
   apiRequest,
@@ -14,8 +23,8 @@ export default function SignInMethods({
 }: {
   apiRequest: <T>(path: string, options?: RequestInit) => Promise<T>;
   signal: AbortSignal;
-  enabled: boolean;
-  callback: boolean;
+  enabled: Record<OAuthProvider, boolean>;
+  callback: OAuthProvider | null;
   feedback?: string;
   onClose: () => void;
   onConnect: (run: () => void) => void;
@@ -23,7 +32,7 @@ export default function SignInMethods({
   const [methods, setMethods] = useState<Methods>();
   const [error, setError] = useState(feedback ?? "");
   const [pending, setPending] = useState(true);
-  const [connected, setConnected] = useState(false);
+  const [connected, setConnected] = useState<OAuthProvider | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const callbackRequest = useRef<Promise<unknown> | null>(null);
@@ -40,18 +49,21 @@ export default function SignInMethods({
     let active = true;
     const load = async () => {
       if (callback) {
-        callbackRequest.current ??= request("/auth/google/finish-connect", {
-          method: "POST",
-        });
+        callbackRequest.current ??= request(
+          `/auth/${callback}/finish-connect`,
+          {
+            method: "POST",
+          },
+        );
         try {
           await callbackRequest.current;
-          if (active && !signal.aborted) setConnected(true);
+          if (active && !signal.aborted) setConnected(callback);
         } catch (error) {
           if (active && !signal.aborted)
             setError(
               error instanceof Error
                 ? error.message
-                : "Could not connect Google. Try again.",
+                : `Could not connect ${oauthProviderNames[callback]}. Try again.`,
             );
         }
       }
@@ -73,21 +85,21 @@ export default function SignInMethods({
     };
   }, [callback, signal]);
 
-  const connect = async () => {
+  const connect = async (provider: OAuthProvider) => {
     if (pending) return;
     setPending(true);
     setError("");
     try {
-      const response = await apiRequest("/auth/google/connect", {
+      const response = await apiRequest(`/auth/${provider}/connect`, {
         method: "POST",
       });
-      if (!signal.aborted) followGoogleAuthorization(response);
+      if (!signal.aborted) followOAuthAuthorization(provider, response);
     } catch (error) {
       if (!signal.aborted) {
         setError(
           error instanceof Error
             ? error.message
-            : "Could not connect Google. Try again.",
+            : `Could not connect ${oauthProviderNames[provider]}. Try again.`,
         );
         setPending(false);
       }
@@ -119,33 +131,49 @@ export default function SignInMethods({
       </header>
       {pending && <p role="status">Checking sign-in methods…</p>}
       {error && <p role="alert">{error}</p>}
-      {connected && <p role="status">Google is connected.</p>}
+      {connected && (
+        <p role="status">{oauthProviderNames[connected]} is connected.</p>
+      )}
       {methods && (
         <>
           <p>
             Password{" "}
             {methods.passwordConfigured ? "configured" : "not configured"}
           </p>
-          <p>
-            Google {methods.googleConnected ? "connected" : "not connected"}
-          </p>
-          {enabled && !methods.googleConnected && (
-            <>
-              <p>
-                Connect a Google account to use it the next time you sign in.
-                Sign in to DevMind again first if your session is older than
-                five minutes.
-              </p>
-              <button
-                type="button"
-                className="primary-btn"
-                disabled={pending}
-                onClick={() => onConnect(() => void connect())}
-              >
-                Connect Google
-              </button>
-            </>
-          )}
+          {oauthProviders.map((provider) => {
+            if (
+              provider === "github" &&
+              !enabled.github &&
+              methods.githubConnected === undefined
+            )
+              return null;
+            const name = oauthProviderNames[provider];
+            const linked = methods[`${provider}Connected`];
+            return (
+              <div key={provider}>
+                <p>
+                  {name} {linked ? "connected" : "not connected"}
+                </p>
+                {enabled[provider] && !linked && (
+                  <>
+                    <p>
+                      Connect a {name} account to use it the next time you sign
+                      in. Sign in to DevMind again first if your session is
+                      older than five minutes.
+                    </p>
+                    <button
+                      type="button"
+                      className="primary-btn"
+                      disabled={pending}
+                      onClick={() => onConnect(() => void connect(provider))}
+                    >
+                      Connect {name}
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          })}
         </>
       )}
     </dialog>

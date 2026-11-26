@@ -371,17 +371,22 @@ beforeEach(() => {
 
 const client = request(app);
 
-test("Google is disabled by default and rejects OAuth requests", async () => {
-  await request(app)
-    .get("/api/auth/google/status")
-    .set("X-DevMind-Origin", testOrigin)
-    .expect(200, { enabled: false });
-  await request(app).get("/api/auth/google/callback").expect(404);
-  await request(app)
-    .post("/api/auth/google/sign-in")
-    .set("Origin", testOrigin)
-    .expect(404);
-});
+for (const provider of ["google", "github"]) {
+  test(`${provider} is disabled by default and rejects OAuth requests`, async () => {
+    const path = `/api/auth/${provider}`;
+    await request(app)
+      .get(path + "/status")
+      .set("X-DevMind-Origin", testOrigin)
+      .expect(200, { enabled: false });
+    await request(app)
+      .get(path + "/callback")
+      .expect(404);
+    await request(app)
+      .post(path + "/sign-in")
+      .set("Origin", testOrigin)
+      .expect(404);
+  });
+}
 const credentials = (action, payload, status) =>
   submitCredentials(client, action, payload, status);
 

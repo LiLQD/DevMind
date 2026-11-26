@@ -2,16 +2,17 @@ import type { Types } from "mongoose";
 import { mongo } from "mongoose";
 import Account from "../models/Account.ts";
 
-const identityField = "identities.google";
+export type OAuthProvider = "google" | "github";
+export type OAuthIdentity = { sub: string; email: string; name: string };
 function duplicate(error: unknown) {
   return error instanceof mongo.MongoServerError && error.code === 11000;
 }
 
-export async function findOrCreateGoogleAccount(identity: {
-  sub: string;
-  email: string;
-  name: string;
-}) {
+export async function findOrCreateOAuthAccount(
+  provider: OAuthProvider,
+  identity: OAuthIdentity,
+) {
+  const identityField = `identities.${provider}`;
   await Account.init();
   const filter = { [identityField]: identity.sub };
   const linked = await Account.findOne(filter);
@@ -20,7 +21,7 @@ export async function findOrCreateGoogleAccount(identity: {
     return await Account.create({
       email: identity.email,
       name: identity.name,
-      identities: { google: identity.sub },
+      identities: { [provider]: identity.sub },
     });
   } catch (error) {
     if (!duplicate(error)) throw error;
@@ -29,10 +30,12 @@ export async function findOrCreateGoogleAccount(identity: {
   }
 }
 
-export async function connectGoogleAccount(
+export async function connectOAuthAccount(
+  provider: OAuthProvider,
   accountId: Types.ObjectId,
   subject: string,
 ) {
+  const identityField = `identities.${provider}`;
   await Account.init();
   try {
     return Boolean(
