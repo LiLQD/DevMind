@@ -5,6 +5,9 @@ type AuthPageProps = {
   onSwitchMode: () => void;
   error: string;
   isPending: boolean;
+  googleEnabled?: boolean;
+  googlePending?: boolean;
+  onGoogleSignIn: () => void;
   onEdit: () => void;
   email: string;
   setEmail: (email: string) => void;
@@ -20,6 +23,9 @@ export default function AuthPage({
   onSwitchMode,
   error,
   isPending,
+  googleEnabled,
+  googlePending,
+  onGoogleSignIn,
   onEdit,
   email,
   setEmail,
@@ -106,6 +112,18 @@ export default function AuthPage({
             {isLogin ? "Create an account" : "Back to sign in"}
           </button>
         </form>
+        {googleEnabled && (
+          <button
+            type="button"
+            className="google-sign-in-button"
+            disabled={isPending}
+            aria-busy={googlePending}
+            onClick={onGoogleSignIn}
+          >
+            <img src="/google-sign-in-logo.png" alt="" width="18" height="18" />
+            {googlePending ? "Opening Google…" : "Continue with Google"}
+          </button>
+        )}
       </div>
     </div>
   );

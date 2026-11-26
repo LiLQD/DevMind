@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { isObjectIdOrHexString, Types } from "mongoose";
+import { googleAuth } from "../config/google-auth.ts";
 import { cookieAuth } from "../config/cookie-auth.ts";
 import type { createAuthSession } from "./auth-session.service.ts";
 
@@ -19,6 +20,7 @@ const options = {
 const prefix = options.secure ? "__Host-devmind-" : "devmind-";
 const accessName = `${prefix}access`;
 const refreshName = `${prefix}refresh`;
+const googleName = `${prefix}google`;
 const preAuthName = `${prefix}csrf`;
 
 function readCookie(req: Request, name: string) {
@@ -28,6 +30,23 @@ function readCookie(req: Request, name: string) {
     .map((part) => part.trim())
     .filter((part) => part.startsWith(field));
   return matches?.length === 1 ? matches[0].slice(field.length) : undefined;
+}
+
+export function readGoogleBinding(req: Request) {
+  const value = readCookie(req, googleName);
+  return value && noncePattern.test(value) ? value : undefined;
+}
+
+export function setGoogleBinding(
+  res: Response,
+  binding: string,
+  maxAge: number,
+) {
+  res.cookie(googleName, binding, { ...options, maxAge });
+}
+
+export function clearGoogleBinding(res: Response) {
+  if (googleAuth) res.clearCookie(googleName, options);
 }
 
 export function readRefreshCookie(req: Request) {
@@ -92,6 +111,7 @@ export function setSessionCookies(
 }
 
 export function clearSessionCookies(res: Response) {
+  clearGoogleBinding(res);
   res.clearCookie(accessName, options);
   res.clearCookie(refreshName, options);
 }

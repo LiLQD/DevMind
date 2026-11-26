@@ -9,9 +9,9 @@ const accountSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     },
-    password: {
-      type: String,
-      required: true,
+    password: { type: String },
+    identities: {
+      google: { type: String, select: false },
     },
     name: {
       type: String,
@@ -30,6 +30,14 @@ const accountSchema = new mongoose.Schema(
     sessionVersion: { type: Number, default: 0, select: false },
   },
   { timestamps: true },
+);
+
+accountSchema.index(
+  { "identities.google": 1 },
+  {
+    unique: true,
+    partialFilterExpression: { "identities.google": { $type: "string" } },
+  },
 );
 
 const Account = mongoose.model("Account", accountSchema);

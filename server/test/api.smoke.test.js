@@ -18,6 +18,7 @@ process.env.GEMINI_API_KEY = "smoke-test-key";
 process.env.NODE_ENV = "production";
 process.env.GEMINI_SUGGESTION_TIMEOUT_MS = "250";
 process.env.ENABLE_MOCK_BILLING = "true";
+process.env.GOOGLE_AUTH_ENABLED = "false";
 
 const moduleUrl = (relativePath) =>
   pathToFileURL(resolve(new URL("..", import.meta.url).pathname, relativePath))
@@ -369,6 +370,18 @@ beforeEach(() => {
 });
 
 const client = request(app);
+
+test("Google is disabled by default and rejects OAuth requests", async () => {
+  await request(app)
+    .get("/api/auth/google/status")
+    .set("X-DevMind-Origin", testOrigin)
+    .expect(200, { enabled: false });
+  await request(app).get("/api/auth/google/callback").expect(404);
+  await request(app)
+    .post("/api/auth/google/sign-in")
+    .set("Origin", testOrigin)
+    .expect(404);
+});
 const credentials = (action, payload, status) =>
   submitCredentials(client, action, payload, status);
 

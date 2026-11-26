@@ -227,6 +227,31 @@ suffix, allow the exact approved preview origin on the backend, and redeploy.
 
 Authentication uses same-origin cookies. Keep the existing cookie secrets and session database during a coordinated rollout so existing sessions can continue. Previously issued bearer tokens are rejected, and users with only a legacy token need to sign in again.
 
+### Optional Google sign-in
+
+1. Open [Google Auth Platform](https://console.cloud.google.com/auth) in your Google Cloud project. In **Branding**, set the app name to DevMind, provide a support email and developer contact, and configure the public home page, privacy policy, and authorized domains for the deployment. Use a verified, owned custom domain if Google cannot verify the shared Vercel hostname for your branding. The origin in the steps below must then be that custom domain.
+2. In **Audience**, choose **External** for personal Google accounts. Keep the app in **Testing** for the first smoke test and add the accounts you intend to test with if Google asks for test users. In **Data Access**, request only `openid`, `email`, and `profile`. Google exempts these basic identity scopes from sensitive-scope verification and the usual test-user restrictions. Review the branding requirements before publishing the production app. [Google publishing and verification requirements](https://developers.google.com/identity/protocols/oauth2/production-readiness/overview)
+3. In **Clients**, create a **Web application** OAuth client. Add the exact **Authorized redirect URI** and leave Authorized JavaScript origins empty for this server-side flow. Use separate credentials for development and production.
+
+   | Environment | Application origin                 | Authorized redirect URI                                     |
+   | ----------- | ---------------------------------- | ----------------------------------------------------------- |
+   | Local Vite  | `http://localhost:5173`            | `http://localhost:5173/api/auth/google/callback`            |
+   | Hosted demo | `https://dev-mind-nine.vercel.app` | `https://dev-mind-nine.vercel.app/api/auth/google/callback` |
+
+4. On Render, configure the following variables. For local testing, set them in the server's ignored environment file. Keep `GOOGLE_AUTH_ENABLED=false` for the first production deployment.
+
+   | Variable                    | Value                                                                       |
+   | --------------------------- | --------------------------------------------------------------------------- |
+   | `GOOGLE_AUTH_ENABLED`       | `false` by default. Set to `true` in the configured smoke-test environment. |
+   | `GOOGLE_AUTH_CLIENT_ID`     | Web application client ID.                                                  |
+   | `GOOGLE_AUTH_CLIENT_SECRET` | Web application client secret. Store on the backend only.                   |
+   | `GOOGLE_AUTH_APP_ORIGIN`    | Exact public application origin, also present in `COOKIE_AUTH_ORIGINS`.     |
+   | `GOOGLE_AUTH_CALLBACK_URI`  | Exact registered URI from the table for that origin.                        |
+
+5. Deploy Render, then Vercel. Keep the existing `VERCEL_API_ORIGIN` set to the Render backend's bare HTTPS origin. The existing same-origin rewrite forwards the callback to Express. Vercel needs no Google environment variables. Use a fixed approved origin for each OAuth client. Keep Google disabled on dynamic preview URLs. Ensure platform access logs, analytics, and error monitoring omit the callback query string and all cookie headers.
+6. Before enabling production, complete a real Google sign-in on the explicitly configured development or staging origin. Check that the browser returns to DevMind and that reload and logout work. Verify MongoDB has the unique partial index on `accounts.identities.google` and that Redis supports `GETDEL` (Redis 6.2 or later). Mongoose builds the additive index on schema initialization. Deployments with automatic index creation disabled must provision this specific index before enabling Google. Publish the production OAuth app when ready, then set `GOOGLE_AUTH_ENABLED=true` on Render and redeploy.
+7. To roll back Google sign-in, set `GOOGLE_AUTH_ENABLED=false` and redeploy Render. Existing DevMind sessions and password sign-in continue to work. Provider-only accounts need Google enabled again to start a new session.
+
 ## 📡 API Overview
 
 ---

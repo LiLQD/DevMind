@@ -265,3 +265,34 @@ export async function cookieWorkspaceRequest(
   // ACCESS_EXPIRED is emitted by the auth guard before the operation runs.
   return send();
 }
+
+export async function googleSignInAvailable(signal: AbortSignal) {
+  const data = record(
+    await request("/auth/google/status", {
+      signal,
+      headers: { "X-DevMind-Origin": window.location.origin },
+    }),
+  );
+  return data?.enabled === true;
+}
+
+export function startGoogleSignIn() {
+  return withSessionLock(async () => {
+    const proof = await csrfProof(undefined, true);
+    return request("/auth/google/sign-in", {
+      method: "POST",
+      headers: { [csrfHeader]: proof },
+    });
+  });
+}
+
+export function followGoogleAuthorization(value: unknown) {
+  const url = record(value)?.url;
+  if (
+    typeof url !== "string" ||
+    new URL(url).origin !== "https://accounts.google.com"
+  ) {
+    throw new Error("Google sign-in could not be started. Try again.");
+  }
+  window.location.assign(url);
+}
