@@ -1,9 +1,14 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEventHandler, MouseEvent } from "react";
 import type { Collection } from "../types";
 import NoteMarkdown from "./NoteMarkdown";
 
 import { fitsNoteRequest, readMarkdownFile } from "../markdownFile";
+
+type Suggestions = {
+  tags: string[];
+  collection: { id: string; name: string } | null;
+};
 
 type CollectionOption = Partial<Collection> & { id?: string };
 
@@ -15,6 +20,10 @@ const fixTemplate = [
   "## Code snippets",
   "## Source URL (optional)",
 ].join("\n\n\n");
+
+function normalizeTag(value: string) {
+  return value.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase();
+}
 
 type CreatePanelProps = {
   isEditing: boolean;
@@ -33,6 +42,10 @@ type CreatePanelProps = {
   setSelectedCollectionId: (id: string) => void;
   newCollectionName: string;
   setNewCollectionName: (name: string) => void;
+  onSuggest: (
+    draft: { title: string; content: string },
+    signal: AbortSignal,
+  ) => Promise<Suggestions>;
   onCreateCollection: (name: string) => Promise<CollectionOption | null>;
 };
 
@@ -53,6 +66,7 @@ export default function CreatePanel({
   setSelectedCollectionId,
   newCollectionName,
   setNewCollectionName,
+  onSuggest,
   onCreateCollection,
 }: CreatePanelProps) {
   const [isCreatingCollection, setIsCreatingCollection] = useState(false);
@@ -63,6 +77,86 @@ export default function CreatePanel({
   const titleInputRef = useRef<HTMLInputElement>(null);
   const collectionInputRef = useRef<HTMLInputElement>(null);
   const contentInputRef = useRef<HTMLTextAreaElement>(null);
+
+  const [suggestions, setSuggestions] = useState<Suggestions | null>(null);
+  const [suggestionMessage, setSuggestionMessage] = useState("");
+  const [suggestionError, setSuggestionError] = useState("");
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  const suggestionRequest = useRef<AbortController | null>(null);
+  const draftVersion = useRef(0);
+
+  useLayoutEffect(() => {
+    draftVersion.current += 1;
+    setSuggestions(null);
+    setSuggestionMessage("");
+  }, [title, content]);
+
+  useLayoutEffect(
+    () => () => {
+      suggestionRequest.current?.abort();
+    },
+    [],
+  );
+
+  const suggest = async () => {
+    if (suggestionRequest.current || !content.trim()) return;
+    const controller = new AbortController();
+    const version = draftVersion.current;
+    suggestionRequest.current = controller;
+    setIsSuggesting(true);
+    setSuggestionError("");
+    setSuggestionMessage("");
+    setSuggestions(null);
+    try {
+      const result = await onSuggest({ title, content }, controller.signal);
+      if (controller.signal.aborted || version !== draftVersion.current) return;
+      setSuggestions(result);
+      if (!result.tags.length && !result.collection) {
+        setSuggestionMessage("No suggestions for this draft.");
+      }
+    } catch (error) {
+      if (controller.signal.aborted || version !== draftVersion.current) return;
+      setSuggestionError(
+        error instanceof Error
+          ? error.message
+          : "Suggestions failed. Try again.",
+      );
+    } finally {
+      suggestionRequest.current = null;
+      if (!controller.signal.aborted) setIsSuggesting(false);
+    }
+  };
+
+  const applyTag = (tag: string) => {
+    const tags = tagInput
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (!tags.some((value) => normalizeTag(value) === normalizeTag(tag))) {
+      const next = [...tags, tag].join(", ");
+      if (next.length > 500) {
+        setSuggestionError(
+          "Make room in the Tags field before applying this suggestion.",
+        );
+        return;
+      }
+      setTagInput(next);
+    }
+    setSuggestionError("");
+    dismissTag(tag);
+  };
+
+  const dismissTag = (tag: string) =>
+    setSuggestions(
+      (current) =>
+        current && {
+          ...current,
+          tags: current.tags.filter((value) => value !== tag),
+        },
+    );
+
+  const dismissCollection = () =>
+    setSuggestions((current) => current && { ...current, collection: null });
 
   const importMarkdown = async (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
@@ -218,6 +312,26 @@ export default function CreatePanel({
           />
         </label>
 
+        <div className="editor-suggestions">
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={() => void suggest()}
+            disabled={!content.trim() || isSuggesting}
+            aria-describedby="suggestion-privacy"
+          >
+            <span aria-hidden="true">✦</span>{" "}
+            {isSuggesting
+              ? "Generating suggestions…"
+              : "Suggest tags & collection"}
+          </button>
+          <small id="suggestion-privacy" className="form-help">
+            Sends the title and a short draft excerpt to Gemini.
+          </small>
+          {suggestionError && <p role="alert">{suggestionError}</p>}
+          {suggestionMessage && <p role="status">{suggestionMessage}</p>}
+        </div>
+
         {/* Tags */}
         <label className="form-field">
           <span>Tags</span>
@@ -231,6 +345,26 @@ export default function CreatePanel({
           />
           <small className="form-help">Separate tags with commas.</small>
         </label>
+
+        {suggestions?.tags.map((tag) => (
+          <div className="editor-suggestion-row" key={tag}>
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => applyTag(tag)}
+            >
+              Add tag: {tag}
+            </button>
+            <button
+              type="button"
+              className="secondary-btn"
+              aria-label={`Dismiss tag ${tag}`}
+              onClick={() => dismissTag(tag)}
+            >
+              ×
+            </button>
+          </div>
+        ))}
 
         {/* Collection */}
         <div className="form-field">
@@ -260,6 +394,34 @@ export default function CreatePanel({
             })}
             <option value="__create_collection__">＋ New collection…</option>
           </select>
+
+          {suggestions?.collection &&
+            collections.some(
+              (item) => getCollectionId(item) === suggestions.collection?.id,
+            ) && (
+              <div className="editor-suggestion-row">
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  disabled={isCreatingCollection}
+                  onClick={() => {
+                    if (!suggestions.collection) return;
+                    setSelectedCollectionId(suggestions.collection.id);
+                    dismissCollection();
+                  }}
+                >
+                  Apply collection: {suggestions.collection.name}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  aria-label="Dismiss collection suggestion"
+                  onClick={dismissCollection}
+                >
+                  ×
+                </button>
+              </div>
+            )}
 
           {isCreatingCollection && (
             <div className="collection-quick-create">

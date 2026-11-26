@@ -46,6 +46,8 @@ test("loads required settings and development defaults", (t) => {
     PORT: 8080,
     NODE_ENV: "development",
     MOCK_BILLING_ENABLED: false,
+    GEMINI_SUGGESTION_MODEL: "gemini-3.1-flash-lite",
+    GEMINI_SUGGESTION_TIMEOUT_MS: 10_000,
     TRUST_PROXY: false,
   });
 });
@@ -103,4 +105,23 @@ test("rejects a negative proxy hop count", (t) => {
   const result = loadEnv(t, { ...required, TRUST_PROXY: "-1" });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /TRUST_PROXY must be a non-negative integer/);
+});
+
+test("allows configured suggestion settings and rejects an invalid deadline", (t) => {
+  const config = readEnv(t, {
+    ...required,
+    GEMINI_SUGGESTION_MODEL: " configured-model ",
+    GEMINI_SUGGESTION_TIMEOUT_MS: "8000",
+  });
+  assert.equal(config.GEMINI_SUGGESTION_MODEL, "configured-model");
+  assert.equal(config.GEMINI_SUGGESTION_TIMEOUT_MS, 8000);
+  const result = loadEnv(t, {
+    ...required,
+    GEMINI_SUGGESTION_TIMEOUT_MS: "30001",
+  });
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /GEMINI_SUGGESTION_TIMEOUT_MS must be an integer/,
+  );
 });

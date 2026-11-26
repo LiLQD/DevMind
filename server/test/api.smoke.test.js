@@ -16,6 +16,7 @@ process.env.REDIS_URL = "redis://smoke-test";
 process.env.MONGODB_URI = "mongodb://smoke-test";
 process.env.GEMINI_API_KEY = "smoke-test-key";
 process.env.NODE_ENV = "production";
+process.env.GEMINI_SUGGESTION_TIMEOUT_MS = "250";
 process.env.ENABLE_MOCK_BILLING = "true";
 
 const moduleUrl = (relativePath) =>
@@ -27,6 +28,7 @@ const query = (value) => {
     select: () => chain,
     populate: () => chain,
     sort: () => chain,
+    limit: () => chain,
     lean: () => chain,
     // oxlint-disable-next-line unicorn/no-thenable
     then: (resolveValue, rejectValue) =>
@@ -200,6 +202,10 @@ class Collection {
     return this;
   }
 
+  static find(filter) {
+    return query(collections.filter((entry) => matches(entry, filter)));
+  }
+
   static findOne(filter) {
     return query(
       collections.find((collection) => matches(collection, filter)) || null,
@@ -213,11 +219,22 @@ class Collection {
   }
 }
 
+const suggestionHits = new Map();
+
 class RedisStore {
+  constructor({ prefix }) {
+    this.prefix = prefix;
+  }
+
   init() {}
 
-  async increment() {
-    return { totalHits: 1, resetTime: new Date(Date.now() + 60_000) };
+  async increment(key) {
+    let totalHits = 1;
+    if (this.prefix === "devmind:rate-limit:suggestions:") {
+      totalHits += suggestionHits.get(key) ?? 0;
+      suggestionHits.set(key, totalHits);
+    }
+    return { totalHits, resetTime: new Date(Date.now() + 60_000) };
   }
 
   async decrement() {}
@@ -232,6 +249,10 @@ class Tag {
 
   async save() {
     tags.push(this);
+  }
+
+  static find(filter) {
+    return query(tags.filter((entry) => matches(entry, filter)));
   }
 
   static findOne(filter) {
@@ -286,6 +307,18 @@ mock.module(moduleUrl("src/config/redis.ts"), {
   },
 });
 mock.module("rate-limit-redis", { exports: { default: RedisStore } });
+const generateContent = mock.fn(async () => ({
+  text: JSON.stringify({ tags: [], collectionIndex: null }),
+}));
+const { ThinkingLevel } = await import("@google/genai");
+mock.module("@google/genai", {
+  exports: {
+    ThinkingLevel,
+    GoogleGenAI: class {
+      models = { generateContent };
+    },
+  },
+});
 const defaultEmbedding = async () => [1, 0];
 const generateEmbedding = mock.fn(defaultEmbedding);
 const generateQueryEmbedding = mock.fn(defaultEmbedding);
@@ -303,6 +336,9 @@ const { default: app } = await import("../src/app.ts");
 
 beforeEach(() => {
   accounts.length = 0;
+  suggestionHits.clear();
+  generateContent.mock.resetCalls();
+  generateContent.mock.restore();
   sessions.length = 0;
   notes.length = 0;
   collections.length = 0;
@@ -1022,4 +1058,151 @@ test("bulk note import requires authentication and an effective Pro plan", async
   await submit([item]).expect(503);
   assert.equal(notes.length, 0);
   assert.equal(generateEmbedding.mock.callCount(), 0);
+});
+
+const suggestionEndpoint = "/api/notes/suggestions";
+
+test("suggests owned metadata for a Vietnamese draft and meters only generation", async () => {
+  const auth = await register("suggestions@example.com");
+  await register("foreign-suggestions@example.com");
+  await new Tag({ name: "Redis", userId: accounts[0]._id }).save();
+  await new Tag({ name: "Private tag", userId: accounts[1]._id }).save();
+  const owned = await new Collection({
+    name: "Hạ tầng",
+    userId: accounts[0]._id,
+  }).save();
+  await new Collection({
+    name: "Private collection",
+    userId: accounts[1]._id,
+  }).save();
+  generateContent.mock.mockImplementationOnce(async () => ({
+    text: JSON.stringify({
+      tags: [
+        "  REDIS ",
+        "redis",
+        7,
+        "bad,tag",
+        "a\nb",
+        "  HẾT   HẠN ",
+        "bộ nhớ",
+        "ignored",
+      ],
+      collectionIndex: 0,
+    }),
+  }));
+  const content = "Khắc phục lỗi Redis khi khóa hết hạn. " + "x".repeat(2500);
+  await client
+    .post(suggestionEndpoint)
+    .set(auth)
+    .send({ title: "Redis", content })
+    .expect(200, {
+      tags: ["Redis", "hết hạn", "bộ nhớ"],
+      collection: { id: owned._id, name: owned.name },
+    });
+  const [
+    {
+      arguments: [providerRequest],
+    },
+  ] = generateContent.mock.calls;
+  const prompt = JSON.parse(providerRequest.contents);
+  assert.deepEqual(prompt.existingTags, ["Redis"]);
+  assert.deepEqual(prompt.collections, [{ name: "Hạ tầng", index: 0 }]);
+  assert.equal(prompt.draft.excerpt, content.slice(0, 2400));
+  assert.equal(providerRequest.config.httpOptions.retryOptions.attempts, 1);
+  assert.deepEqual(
+    usageRecords.map(
+      ({
+        noteSuggestionRequests,
+        noteEmbeddingRequests,
+        semanticSearchRequests,
+      }) => [
+        noteSuggestionRequests,
+        noteEmbeddingRequests,
+        semanticSearchRequests,
+      ],
+    ),
+    [[1, 0, 0]],
+  );
+  assert.equal(notes.length, 0);
+  assert.equal(tags.length, 2);
+  assert.equal(collections.length, 2);
+
+  for (const collectionIndex of [1, -1, null]) {
+    generateContent.mock.mockImplementationOnce(async () => ({
+      text: JSON.stringify({ tags: [], collectionIndex }),
+    }));
+    await client
+      .post(suggestionEndpoint)
+      .set(auth)
+      .send({ title: "", content })
+      .expect(200, {
+        tags: [],
+        collection: null,
+      });
+  }
+});
+
+test("requires auth and CSRF, and rejects invalid suggestion drafts before generation", async () => {
+  const auth = await register("suggestions-auth@example.com");
+  const draft = { title: "Redis", content: "Redis expires a key." };
+  await client
+    .post(suggestionEndpoint)
+    .set("Origin", testOrigin)
+    .send(draft)
+    .expect(401);
+  const withoutProof = Object.fromEntries(
+    Object.entries(auth).filter(
+      ([name]) => name.toLowerCase() !== "x-devmind-csrf",
+    ),
+  );
+  await client
+    .post(suggestionEndpoint)
+    .set(withoutProof)
+    .send(draft)
+    .expect(403);
+  await client
+    .post(suggestionEndpoint)
+    .set(auth)
+    .send({ title: 4, content: " " })
+    .expect(400);
+  assert.equal(generateContent.mock.callCount(), 0);
+  assert.equal(usageRecords.length, 0);
+});
+
+test("limits suggestion requests by account", async () => {
+  const first = await register("suggestions-limit-one@example.com");
+  const second = await register("suggestions-limit-two@example.com");
+  const draft = { title: "Redis", content: "Redis expires a key." };
+  for (let count = 0; count < 10; count += 1) {
+    await client.post(suggestionEndpoint).set(first).send(draft).expect(200);
+  }
+  await client.post(suggestionEndpoint).set(first).send(draft).expect(429);
+  await client.post(suggestionEndpoint).set(second).send(draft).expect(200);
+  assert.equal(generateContent.mock.callCount(), 11);
+  assert.deepEqual(
+    [...suggestionHits.keys()],
+    accounts.map(({ _id }) => _id),
+  );
+});
+
+test("returns recoverable timeout and malformed-response errors without retry", async () => {
+  const auth = await register("suggestions-failure@example.com");
+  const draft = { title: "Redis", content: "Redis expires a key." };
+  generateContent.mock.mockImplementationOnce(
+    ({ config: { abortSignal } }) =>
+      new Promise((_, reject) => {
+        abortSignal.addEventListener(
+          "abort",
+          () => reject(abortSignal.reason),
+          { once: true },
+        );
+      }),
+  );
+  await client.post(suggestionEndpoint).set(auth).send(draft).expect(504);
+  for (const text of ["invalid JSON", '{"tags":"redis","collectionIndex":0}']) {
+    generateContent.mock.mockImplementationOnce(async () => ({ text }));
+    await client.post(suggestionEndpoint).set(auth).send(draft).expect(503);
+  }
+  assert.equal(generateContent.mock.callCount(), 3);
+  assert.equal(usageRecords[0].noteSuggestionRequests, 3);
 });

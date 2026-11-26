@@ -9,6 +9,7 @@ const monthlyUsageSchema = new mongoose.Schema(
     },
     monthStart: { type: Date, required: true },
     semanticSearchRequests: { type: Number, default: 0 },
+    noteSuggestionRequests: { type: Number, default: 0 },
     noteEmbeddingRequests: { type: Number, default: 0 },
   },
   { timestamps: true },

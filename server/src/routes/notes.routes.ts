@@ -10,6 +10,9 @@ import { bulkImportNotes } from "../controllers/note-import.controller.ts";
 import { searchNotes } from "../controllers/search.controller.ts";
 import { protect } from "../middleware/auth.middleware.ts";
 
+import { suggestNoteOrganization } from "../controllers/note-suggestions.controller.ts";
+import { suggestionLimiter } from "../middleware/rateLimiter.ts";
+
 const router = express.Router();
 
 // All note routes require authentication
@@ -21,6 +24,7 @@ router.route("/").get(getNotes).post(createNote);
 // Semantic search
 router.post("/search", searchNotes);
 router.post("/import", bulkImportNotes);
+router.post("/suggestions", suggestionLimiter, suggestNoteOrganization);
 
 // Individual note operations
 router.route("/:id").get(getNote).put(updateNote).delete(deleteNote);
