@@ -127,23 +127,27 @@ export default function CreatePanel({
     }
   };
 
-  const applyTag = (tag: string) => {
+  const applyTags = (suggestedTags: string[]) => {
     const tags = tagInput
       .split(",")
       .map((value) => value.trim())
       .filter(Boolean);
-    if (!tags.some((value) => normalizeTag(value) === normalizeTag(tag))) {
-      const next = [...tags, tag].join(", ");
+    const existing = new Set(tags.map(normalizeTag));
+    const additions = suggestedTags.filter(
+      (tag) => !existing.has(normalizeTag(tag)),
+    );
+    if (additions.length) {
+      const next = [...tags, ...additions].join(", ");
       if (next.length > 500) {
         setSuggestionError(
-          "Make room in the Tags field before applying this suggestion.",
+          "Make room in the Tags field before applying these suggestions.",
         );
-        return;
+        return false;
       }
       setTagInput(next);
     }
     setSuggestionError("");
-    dismissTag(tag);
+    return true;
   };
 
   const dismissTag = (tag: string) =>
@@ -253,6 +257,17 @@ export default function CreatePanel({
     setSelectedCollectionId("");
   };
 
+  const suggestedCollection =
+    suggestions?.collection &&
+    collections.some(
+      (item) => getCollectionId(item) === suggestions.collection?.id,
+    )
+      ? suggestions.collection
+      : null;
+  const showApplyAll =
+    suggestions &&
+    suggestions.tags.length + Number(Boolean(suggestedCollection)) > 1;
+
   const selectedCollectionExists = collections.some(
     (c) => getCollectionId(c) === String(selectedCollectionId),
   );
@@ -351,7 +366,9 @@ export default function CreatePanel({
             <button
               type="button"
               className="secondary-btn"
-              onClick={() => applyTag(tag)}
+              onClick={() => {
+                if (applyTags([tag])) dismissTag(tag);
+              }}
             >
               Add tag: {tag}
             </button>
@@ -395,33 +412,48 @@ export default function CreatePanel({
             <option value="__create_collection__">＋ New collection…</option>
           </select>
 
-          {suggestions?.collection &&
-            collections.some(
-              (item) => getCollectionId(item) === suggestions.collection?.id,
-            ) && (
-              <div className="editor-suggestion-row">
-                <button
-                  type="button"
-                  className="secondary-btn"
-                  disabled={isCreatingCollection}
-                  onClick={() => {
-                    if (!suggestions.collection) return;
-                    setSelectedCollectionId(suggestions.collection.id);
-                    dismissCollection();
-                  }}
-                >
-                  Apply collection: {suggestions.collection.name}
-                </button>
-                <button
-                  type="button"
-                  className="secondary-btn"
-                  aria-label="Dismiss collection suggestion"
-                  onClick={dismissCollection}
-                >
-                  ×
-                </button>
-              </div>
-            )}
+          {suggestedCollection && (
+            <div className="editor-suggestion-row">
+              <button
+                type="button"
+                className="secondary-btn"
+                disabled={isCreatingCollection}
+                onClick={() => {
+                  setSelectedCollectionId(suggestedCollection.id);
+                  dismissCollection();
+                }}
+              >
+                Apply collection: {suggestedCollection.name}
+              </button>
+              <button
+                type="button"
+                className="secondary-btn"
+                aria-label="Dismiss collection suggestion"
+                onClick={dismissCollection}
+              >
+                ×
+              </button>
+            </div>
+          )}
+          {showApplyAll && (
+            <div className="editor-suggestion-row">
+              <button
+                type="button"
+                className="secondary-btn"
+                disabled={Boolean(suggestedCollection) && isCreatingCollection}
+                onClick={() => {
+                  if (!applyTags(suggestions.tags)) return;
+                  if (suggestedCollection)
+                    setSelectedCollectionId(suggestedCollection.id);
+                  setSuggestions(null);
+                }}
+              >
+                {suggestedCollection
+                  ? `Apply all, including ${suggestedCollection.name}`
+                  : "Apply all tags"}
+              </button>
+            </div>
+          )}
 
           {isCreatingCollection && (
             <div className="collection-quick-create">

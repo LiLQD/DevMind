@@ -122,7 +122,7 @@ origin. Include the exact Vite origin in the backend’s `COOKIE_AUTH_ORIGINS`.
 In the note editor, choose **Suggest tags & collection** for a typed draft or
 a single imported Markdown file. DevMind sends the draft title, up to 2,400
 characters of content, and up to 40 tag names and 40 collection names from
-your account to Gemini. You can accept or dismiss individual suggestions.
+your account to Gemini. You can accept or dismiss individual suggestions or apply them together.
 Accepted suggestions are saved through the normal note form.
 
 The backend defaults to Gemini 3.1 Flash-Lite. Set

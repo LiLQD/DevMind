@@ -112,6 +112,14 @@ test("suggests organization for an imported Markdown draft and applies choices i
     .getByRole("button", { name: "Apply collection: Infrastructure" })
     .click();
   await expect(collectionField).toHaveValue("infra");
+  await collectionField.selectOption("");
+  await page.getByRole("button", { name: suggestLabel }).click();
+  await expect(collectionField).toHaveValue("");
+  await page
+    .getByRole("button", { name: "Apply all, including Infrastructure" })
+    .click();
+  await expect(tags).toHaveValue("manual, redis, rate limiting");
+  await expect(collectionField).toHaveValue("infra");
 });
 
 test("discards a stale response after an edit and leaves saving available during generation and after failure", async ({
