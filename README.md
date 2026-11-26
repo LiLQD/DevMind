@@ -132,6 +132,22 @@ the default 10,000 ms generation deadline. Each account can request
 suggestions up to 10 times per hour. Generation attempts have a separate
 internal usage counter and do not use semantic-search quota.
 
+### Existing database tag index migration
+
+After deploying the backend revision with account-scoped tag uniqueness, run
+the maintenance command once for each existing database that has the legacy
+global tag index. Provide `TAG_INDEX_MIGRATION_MONGODB_URI` explicitly through
+the operator environment. The URI must select the intended database.
+
+```sh
+node server/scripts/migrate-account-scoped-tag-index.mjs
+```
+
+The command verifies the compound unique index on `tags` and drops the legacy
+`name_1` index only if its definition matches. Reruns are safe. Tag records,
+note references, and unrelated indexes are preserved. Once different accounts
+share tag names, a backend rollback must retain the account-scoped schema.
+
 ### Mock checkout
 
 For local billing simulation, set `NODE_ENV=development` and

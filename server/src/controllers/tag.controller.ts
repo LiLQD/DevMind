@@ -1,4 +1,5 @@
 import type { RequestHandler } from "express";
+import { mongo } from "mongoose";
 import Tag from "../models/Tag.ts";
 
 export const createTag: RequestHandler = async (req, res) => {
@@ -12,20 +13,21 @@ export const createTag: RequestHandler = async (req, res) => {
       return res.status(400).json({ message: "Tag name is required." });
     }
 
-    // Check if tag already exists for this user
-    const existing = await Tag.findOne({
-      name: trimmedName,
-      userId: req.user!.id,
-    });
-    if (existing) {
-      return res.status(409).json({ message: "Tag already exists." });
+    const identity = { name: trimmedName, userId: req.user!.id };
+    await Tag.init();
+    const tag = new Tag(identity);
+    try {
+      await tag.save();
+    } catch (error) {
+      if (
+        error instanceof mongo.MongoServerError &&
+        error.code === 11000 &&
+        (await Tag.exists(identity))
+      ) {
+        return res.status(409).json({ message: "Tag already exists." });
+      }
+      throw error;
     }
-
-    const tag = new Tag({
-      name: trimmedName,
-      userId: req.user!.id,
-    });
-    await tag.save();
 
     res.status(201).json({ tag });
   } catch (error) {

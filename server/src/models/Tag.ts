@@ -6,7 +6,6 @@ const tagSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
-      unique: true,
     },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
