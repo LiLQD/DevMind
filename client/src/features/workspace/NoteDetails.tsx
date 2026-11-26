@@ -1,4 +1,5 @@
 import type { Note } from "../../types";
+import { PanelControl } from "./WorkspaceShell";
 
 export const readingDate = (timestamp: string) =>
   new Date(timestamp).toLocaleDateString(undefined, {
@@ -37,7 +38,10 @@ export default function NoteDetails({
 }) {
   return (
     <aside className="note-details-panel" aria-label="Note details">
-      <h2>Note details</h2>
+      <div className="details-heading">
+        <h2>Note details</h2>
+        <PanelControl panel="details" />
+      </div>
       <dl>
         <div>
           <dt>Collection</dt>

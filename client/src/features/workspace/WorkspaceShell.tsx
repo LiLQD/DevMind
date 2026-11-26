@@ -24,10 +24,46 @@ function readPanels(): Panels {
   return defaultPanels;
 }
 
+type Panel = "navigation" | "browse" | "details";
+type PanelButton = { label: string; expanded: boolean; action: () => void };
 const FocusContext = createContext<{
   focused: boolean;
   toggle: () => void;
+  controls: Partial<Record<Panel, PanelButton>>;
 } | null>(null);
+
+export function PanelControl({
+  panel,
+  reopening,
+}: {
+  panel: Panel;
+  reopening?: boolean;
+}) {
+  const context = useContext(FocusContext);
+  const control = context?.controls[panel];
+  if (
+    !control ||
+    context?.focused ||
+    (reopening !== undefined && reopening === control.expanded)
+  )
+    return null;
+  return (
+    <button
+      type="button"
+      className="workspace-icon-button"
+      data-panel-control={panel}
+      title={control.label}
+      aria-label={control.label}
+      aria-controls={
+        panel === "navigation" ? "workspace-navigation" : `workspace-${panel}`
+      }
+      aria-expanded={control.expanded}
+      onClick={control.action}
+    >
+      <WorkspaceIcon name={panel === "browse" ? "list" : panel} />
+    </button>
+  );
+}
 
 export function FocusControl() {
   const context = useContext(FocusContext);
@@ -37,10 +73,11 @@ export function FocusControl() {
       type="button"
       className="secondary-btn focus-control"
       aria-pressed={context.focused}
+      aria-label={context.focused ? "Exit focus mode" : "Focus mode"}
       onClick={context.toggle}
     >
       <WorkspaceIcon name="focus" />
-      {context.focused ? "Exit focus mode" : "Focus mode"}
+      <span>{context.focused ? "Exit focus mode" : "Focus mode"}</span>
     </button>
   );
 }
@@ -81,7 +118,16 @@ export default function WorkspaceShell({
     Boolean(details) && detailsVisible && !wide && !focusActive;
   const root = useRef<HTMLElement>(null);
   const navToggle = useRef<HTMLButtonElement>(null);
-  const detailToggle = useRef<HTMLButtonElement>(null);
+  const focusPanel = (panel: Panel) =>
+    requestAnimationFrame(() => {
+      [
+        ...(root.current?.querySelectorAll<HTMLButtonElement>(
+          `[data-panel-control="${panel}"]`,
+        ) ?? []),
+      ]
+        .find((button) => button.getClientRects().length)
+        ?.focus();
+    });
 
   useEffect(() => {
     const mq = matchMedia(mobileWorkspace);
@@ -129,7 +175,15 @@ export default function WorkspaceShell({
       } else if (detailsOverlay) {
         if (mobile) setMobileDetails(false);
         else setPanels((current) => ({ ...current, details: false }));
-        detailToggle.current?.focus();
+        requestAnimationFrame(() =>
+          [
+            ...(root.current?.querySelectorAll<HTMLButtonElement>(
+              '[data-panel-control="details"]',
+            ) ?? []),
+          ]
+            .find((button) => button.getClientRects().length)
+            ?.focus(),
+        );
       } else {
         setFocused(false);
         requestAnimationFrame(() =>
@@ -143,9 +197,54 @@ export default function WorkspaceShell({
     return () => document.removeEventListener("keydown", escape, true);
   }, [focusActive, drawerOpen, detailsOverlay, mobile]);
 
+  const controls: Partial<Record<Panel, PanelButton>> = {
+    navigation: {
+      label: mobile
+        ? "Close navigation"
+        : panels.navigation
+          ? "Collapse navigation"
+          : "Show navigation",
+      expanded: mobile || panels.navigation,
+      action: () => {
+        if (mobile) closeDrawer();
+        else
+          setPanels((current) => ({
+            ...current,
+            navigation: !current.navigation,
+          }));
+      },
+    },
+    ...(!mobile && {
+      browse: {
+        label: panels.browse ? "Collapse note list" : "Show note list",
+        expanded: panels.browse,
+        action: () => {
+          setPanels((current) => ({ ...current, browse: !current.browse }));
+          focusPanel("browse");
+        },
+      },
+    }),
+    ...(details && {
+      details: {
+        label: detailsVisible ? "Collapse note details" : "Show note details",
+        expanded: detailsVisible,
+        action: () => {
+          if (mobile) setMobileDetails(!mobileDetails);
+          else
+            setPanels((current) => ({ ...current, details: !detailsVisible }));
+          focusPanel("details");
+        },
+      },
+    }),
+  };
+
   return (
     <FocusContext.Provider
-      value={{ focused: focusActive, toggle: () => setFocused(!focusActive) }}
+      value={{
+        focused: focusActive,
+        toggle: () => setFocused(!focusActive),
+        controls,
+      }}
     >
       <main
         ref={root}
@@ -197,7 +296,7 @@ export default function WorkspaceShell({
           <button
             type="button"
             className="workspace-shade"
-            aria-label="Close navigation"
+            aria-label="Dismiss navigation backdrop"
             tabIndex={-1}
             onClick={closeDrawer}
           />
@@ -208,81 +307,46 @@ export default function WorkspaceShell({
           inert={drawerOpen}
         >
           {browse}
+          <div className="browse-reopen">
+            <PanelControl panel="browse" reopening />
+          </div>
         </div>
         <div className="workspace-center" inert={drawerOpen}>
-          {!focusActive && (
+          {mobile && !focusActive && (
             <div
-              className="workspace-layout-controls"
-              aria-label="Workspace layout"
+              className="workspace-mobile-controls"
+              aria-label="Workspace navigation"
             >
               <button
                 ref={navToggle}
                 type="button"
-                className="secondary-btn layout-toggle"
+                className="workspace-icon-button"
+                title="Show navigation"
                 aria-controls="workspace-navigation"
-                aria-expanded={mobile ? drawer : panels.navigation}
-                aria-label={
-                  (mobile ? drawer : panels.navigation)
-                    ? "Collapse navigation"
-                    : "Show navigation"
-                }
+                aria-expanded={drawerOpen}
+                aria-label="Show navigation"
                 onClick={() => {
-                  if (mobile) {
-                    if (drawer) closeDrawer();
-                    else {
-                      setDrawer(true);
-                      requestAnimationFrame(() =>
-                        root.current
-                          ?.querySelector<HTMLButtonElement>(
-                            ".workspace-navigation button",
-                          )
-                          ?.focus(),
-                      );
-                    }
-                  } else
-                    setPanels({ ...panels, navigation: !panels.navigation });
+                  setDrawer(true);
+                  requestAnimationFrame(() =>
+                    root.current
+                      ?.querySelector<HTMLButtonElement>(
+                        ".workspace-navigation button",
+                      )
+                      ?.focus(),
+                  );
                 }}
               >
                 <WorkspaceIcon name="navigation" />
               </button>
-              <button
-                type="button"
-                className="secondary-btn layout-toggle browse-toggle"
-                aria-controls="workspace-browse"
-                aria-expanded={mobile ? !showDetail : panels.browse}
-                aria-label={
-                  mobile
-                    ? "Back to notes"
-                    : panels.browse
-                      ? "Collapse note list"
-                      : "Show note list"
-                }
-                onClick={() =>
-                  mobile
-                    ? showBrowse()
-                    : setPanels({ ...panels, browse: !panels.browse })
-                }
-              >
-                <WorkspaceIcon name="list" />
-              </button>
-              {details && (
+              {showDetail && (
                 <button
-                  ref={detailToggle}
                   type="button"
-                  className="secondary-btn layout-toggle details-toggle"
-                  aria-controls="workspace-details"
-                  aria-expanded={detailsVisible}
-                  aria-label={
-                    detailsVisible
-                      ? "Collapse note details"
-                      : "Show note details"
-                  }
-                  onClick={() => {
-                    if (mobile) setMobileDetails(!mobileDetails);
-                    else setPanels({ ...panels, details: !detailsVisible });
-                  }}
+                  className="workspace-icon-button"
+                  aria-label="Back to notes"
+                  title="Back to notes"
+                  onClick={showBrowse}
                 >
-                  <WorkspaceIcon name="details" />
+                  <WorkspaceIcon name="back" />
                 </button>
               )}
             </div>

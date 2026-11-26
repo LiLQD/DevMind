@@ -28,12 +28,13 @@ export default function Disclosure({
     const escape = (event: KeyboardEvent) => {
       if (
         event.key !== "Escape" ||
-        beforeDismiss?.() === false ||
+        event.defaultPrevented ||
         document.querySelector("dialog[open]")
       )
         return;
       event.preventDefault();
-      event.stopPropagation();
+      event.stopImmediatePropagation();
+      if (beforeDismiss?.() === false) return;
       setOpen(false);
       button.current?.focus();
     };
@@ -52,6 +53,7 @@ export default function Disclosure({
         type="button"
         className="secondary-btn disclosure-trigger"
         aria-label={label}
+        title={label}
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen(!open)}
@@ -78,6 +80,7 @@ export default function Disclosure({
           if (
             !(event.target instanceof Element) ||
             !event.target.closest("button:not(:disabled)") ||
+            event.target.closest("[data-keep-popover-open]") ||
             event.target.closest("dialog") ||
             document.querySelector("dialog[open]")
           )
@@ -105,7 +108,10 @@ export default function Disclosure({
             ...(panel.current?.querySelectorAll<HTMLButtonElement>(
               "button:not(:disabled)",
             ) ?? []),
-          ].filter((item) => !item.closest("dialog"));
+          ].filter(
+            (item) =>
+              !item.closest("dialog") && item.getClientRects().length > 0,
+          );
           if (!items.length) return;
           event.preventDefault();
           const index = items.indexOf(
