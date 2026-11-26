@@ -227,6 +227,22 @@ suffix, allow the exact approved preview origin on the backend, and redeploy.
 
 Authentication uses same-origin cookies. Keep the existing cookie secrets and session database during a coordinated rollout so existing sessions can continue. Previously issued bearer tokens are rejected, and users with only a legacy token need to sign in again.
 
+### Optional email verification for password registration
+
+Enable this on the backend to require a one-time email link before creating a password account. The link expires after 15 minutes. Users enter their name and choose a password after opening it. Existing password accounts and Google or GitHub sign-in continue to use their current login flows.
+
+1. Create a [Brevo Free account](https://www.brevo.com/products/transactional-email/) and [verify a sender](https://developers.brevo.com/docs/getting-started-with-senders-and-domains). Generate a Brevo API key under **SMTP & API**.
+2. Configure these variables in the local server's ignored environment file or on the backend service in Render:
+
+   | Variable                        | Value                                                                                                             |
+   | ------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+   | `EMAIL_VERIFICATION_ENABLED`    | `true` to require verification for new password accounts. Defaults to disabled.                                   |
+   | `EMAIL_VERIFICATION_APP_ORIGIN` | Exact browser origin listed in `COOKIE_AUTH_ORIGINS`. Use `https://dev-mind-nine.vercel.app` for the hosted demo. |
+   | `BREVO_API_KEY`                 | Brevo API key. Store only on the backend.                                                                         |
+   | `BREVO_SENDER_EMAIL`            | Verified Brevo sender email address.                                                                              |
+
+3. Deploy the updated frontend and backend, then enable the flag and redeploy the backend. Check that Redis supports `GETDEL` (Redis 6.2 or later). Register with a test inbox and confirm the link opens DevMind, completes registration once, and lets the new account sign in again. Setting the flag to `false` restores the previous password registration flow.
+
 ### Optional Google sign-in
 
 1. Open [Google Auth Platform](https://console.cloud.google.com/auth) in your Google Cloud project. In **Branding**, set the app name to DevMind, provide a support email and developer contact, and configure the public home page, privacy policy, and authorized domains for the deployment. Use a verified, owned custom domain if Google cannot verify the shared Vercel hostname for your branding. The origin in the steps below must then be that custom domain.
