@@ -934,6 +934,22 @@ test("serves security headers and rejects unknown CORS origins", async () => {
     .expect("Cache-Control", "no-store");
 });
 
+test("logs the final response status and path without the query string", async (t) => {
+  const log = t.mock.method(console, "log", () => {});
+
+  await request(app).get("/api/unknown?code=example").expect(404);
+
+  assert.equal(log.mock.callCount(), 1);
+  const entry = JSON.parse(log.mock.calls[0].arguments[0]);
+  assert.deepEqual(entry, {
+    method: "GET",
+    path: "/api/unknown",
+    status: 404,
+    durationMs: entry.durationMs,
+  });
+  assert.ok(Number.isInteger(entry.durationMs) && entry.durationMs >= 0);
+});
+
 test("reports dependency readiness separately from liveness", async () => {
   const response = await request(app).get("/api/ready").expect(503);
 
