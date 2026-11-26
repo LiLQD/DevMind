@@ -1098,7 +1098,7 @@ function App() {
           )}
           {editor ? (
             <CreatePanel
-              key={editor.version}
+              key={`${sessionKey}:${editor.version}`}
               isEditing={isEditingNote}
               title={title}
               setTitle={setTitle}
@@ -1115,6 +1115,16 @@ function App() {
               setSelectedCollectionId={setSelectedCollectionId}
               newCollectionName={newCollectionName}
               setNewCollectionName={setNewCollectionName}
+              onSuggest={(draft, signal) =>
+                apiRequest("/notes/suggestions", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    title: draft.title.trim().slice(0, 200),
+                    content: draft.content.trim().slice(0, 2400),
+                  }),
+                  signal: AbortSignal.any([sessionSignal, signal]),
+                })
+              }
               onCreateCollection={createCollection}
             />
           ) : (

@@ -23,6 +23,19 @@ if (trustProxyValue !== undefined && !/^\d+$/.test(trustProxyValue)) {
   throw new Error("TRUST_PROXY must be a non-negative integer");
 }
 
+const suggestionTimeout = Number(
+  process.env.GEMINI_SUGGESTION_TIMEOUT_MS ?? 10_000,
+);
+if (
+  !Number.isSafeInteger(suggestionTimeout) ||
+  suggestionTimeout < 1 ||
+  suggestionTimeout > 30_000
+) {
+  throw new Error(
+    "GEMINI_SUGGESTION_TIMEOUT_MS must be an integer between 1 and 30000",
+  );
+}
+
 export const env = {
   PORT: process.env.PORT || 8080,
   NODE_ENV: nodeEnv,
@@ -31,6 +44,9 @@ export const env = {
       process.env.ENABLE_MOCK_BILLING === "true") ||
     (process.env.NODE_ENV === "production" &&
       process.env.ENABLE_PRODUCTION_MOCK_BILLING === "true"),
+  GEMINI_SUGGESTION_MODEL:
+    process.env.GEMINI_SUGGESTION_MODEL?.trim() || "gemini-3.1-flash-lite",
+  GEMINI_SUGGESTION_TIMEOUT_MS: suggestionTimeout,
   ...required,
   TRUST_PROXY:
     trustProxyValue === undefined

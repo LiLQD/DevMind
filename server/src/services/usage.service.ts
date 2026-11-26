@@ -1,7 +1,7 @@
 import type { Types } from "mongoose";
 import MonthlyUsage from "../models/MonthlyUsage.ts";
 
-type UsageCounter = "noteEmbeddingRequests";
+type UsageCounter = "noteEmbeddingRequests" | "noteSuggestionRequests";
 
 function utcMonthStart(now: Date) {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
@@ -70,23 +70,29 @@ export async function reserveSemanticSearch(
   }
 }
 
+export async function incrementUsage(
+  accountId: Types.ObjectId,
+  counter: UsageCounter,
+) {
+  const { monthStart } = currentUtcMonth();
+  const filter = { accountId, monthStart };
+  const update = { $inc: { [counter]: 1 } };
+  await MonthlyUsage.init();
+  try {
+    await MonthlyUsage.updateOne(filter, update, { upsert: true });
+  } catch (error) {
+    if (!isDuplicateKey(error)) throw error;
+    // A concurrent first request already created this account's month.
+    await MonthlyUsage.updateOne(filter, update);
+  }
+}
+
 export async function recordUsage(
   accountId: Types.ObjectId,
   counter: UsageCounter,
 ) {
-  const monthStart = utcMonthStart(new Date());
-  const filter = { accountId, monthStart };
-  const update = { $inc: { [counter]: 1 } };
-
   try {
-    await MonthlyUsage.init();
-    try {
-      await MonthlyUsage.updateOne(filter, update, { upsert: true });
-    } catch (error) {
-      if (!isDuplicateKey(error)) throw error;
-      // A concurrent first request already created this account's month.
-      await MonthlyUsage.updateOne(filter, update);
-    }
+    await incrementUsage(accountId, counter);
   } catch (error) {
     console.error("Failed to record monthly usage:", error);
   }
