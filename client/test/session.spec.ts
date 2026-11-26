@@ -8,6 +8,9 @@ const accountA = {
     title: "Account A private note",
     content: "Account A private content",
     createdAt: "2026-01-01",
+    collections: [
+      { _id: "collection-a", name: "Account A private collection" },
+    ],
   },
   collection: { _id: "collection-a", name: "Account A private collection" },
 };
@@ -42,13 +45,15 @@ for (const outcome of ["abort", "late success", "late error"]) {
       { sessionId: accountA.sessionId, ignoresAbort },
     );
 
+    await page.clock.setFixedTime(new Date("2026-11-26T12:00:00Z"));
+
     const releaseA = Promise.withResolvers<void>();
     const releaseBSearch = Promise.withResolvers<void>();
-    let holdCollectionsA = false;
+    let holdNotesA = false;
     let activeAccount: typeof accountA | null = accountA;
     const notesFiltersB: (string | null)[] = [];
     const heldA = new Map<string, Request>();
-    const pathsA = ["/api/notes", "/api/collections", "/api/notes/search"];
+    const pathsA = ["/api/notes", "/api/notes/search"];
 
     async function holdAccountA(path: string, request: Request) {
       if (!heldA.has(path)) heldA.set(path, request);
@@ -104,10 +109,6 @@ for (const outcome of ["abort", "late success", "late error"]) {
         return;
       }
       if (pathname === "/api/collections") {
-        if (isAccountA && holdCollectionsA) {
-          await holdAccountA(pathname, request);
-          if (!ignoresAbort) return;
-        }
         await route.fulfill({
           json: [isAccountA ? accountA.collection : accountB.collection],
         });
@@ -116,7 +117,7 @@ for (const outcome of ["abort", "late success", "late error"]) {
       if (pathname === "/api/notes") {
         if (url.searchParams.get("favorite") === "true")
           return route.fulfill({ json: [] });
-        if (isAccountA && url.searchParams.has("collectionId")) {
+        if (isAccountA && holdNotesA) {
           await holdAccountA(pathname, request);
           if (!ignoresAbort) return;
         }
@@ -163,7 +164,8 @@ for (const outcome of ["abort", "late success", "late error"]) {
         page.getByRole("button", { name: accountA.note.title, exact: true }),
       ).toBeVisible();
       await expect(filter).toBeVisible();
-      holdCollectionsA = true;
+      holdNotesA = true;
+      await page.clock.setFixedTime(new Date("2026-11-26T12:01:00Z"));
       await collectionA.click();
       await expect(collectionA).toHaveAttribute("aria-pressed", "true");
       await exact.check();

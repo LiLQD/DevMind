@@ -47,6 +47,7 @@ import {
 } from "./features/auth/cookie-session";
 import type { CookieSession } from "./features/auth/cookie-session";
 
+const notesFreshForMs = 30_000;
 const mockCheckoutEnabled = import.meta.env.VITE_ENABLE_MOCK_BILLING === "true";
 type User = { name?: string; email?: string };
 type NotificationState = {
@@ -155,7 +156,6 @@ function App() {
   } | null>(null);
 
   // --- Data ---
-  const [notes, setNotes] = useState<Note[]>([]);
   const [favoritesView, setFavoritesView] = useState(false);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [relatedNotes, setRelatedNotes] = useState<Note[]>([]);
@@ -170,7 +170,8 @@ function App() {
   const importingFile = useRef(false);
   const openImportedDraft =
     useRef<(draft: { title: string; content: string }) => void>(null);
-  const browseRequest = useRef(0);
+  const notesRequest = useRef<AbortController | null>(null);
+  const notesFetchedAt = useRef<number | null>(null);
   const [completeNotes, setCompleteNotes] = useState<Note[] | null>(null);
   const [selectedCollectionFilter, setSelectedCollectionFilter] = useState<
     string | null
@@ -211,7 +212,6 @@ function App() {
   const [content, setContent] = useState("");
   const [query, setQuery] = useState("");
   const [tagInput, setTagInput] = useState("");
-  const [selectedTagFilter] = useState<string | null>(null);
 
   // --- Refs ---
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -438,11 +438,12 @@ function App() {
     setCompleteNotes(null);
     setFavoritesView(false);
     importingFile.current = false;
-    browseRequest.current += 1;
+    notesRequest.current?.abort();
+    notesRequest.current = null;
+    notesFetchedAt.current = null;
     if (notificationTimerRef.current)
       clearTimeout(notificationTimerRef.current);
     setNotification(null);
-    setNotes([]);
     setIsLoadingNotes(false);
     setIsCreatingNote(false);
     setIsUpdatingNote(false);
@@ -613,37 +614,28 @@ function App() {
   // --- Data fetching ---
   const fetchNotes = async () => {
     if (!sessionKey || sessionSignal.aborted) return;
-    const version = ++browseRequest.current;
+    notesRequest.current?.abort();
+    const request = new AbortController();
+    notesRequest.current = request;
     setIsLoadingNotes(true);
     try {
-      let url = "/notes";
-      const params = new URLSearchParams();
-      if (selectedTagFilter) params.append("tagId", selectedTagFilter);
-      if (
-        selectedCollectionFilter &&
-        selectedCollectionFilter !== uncategorized
-      )
-        params.append("collectionId", selectedCollectionFilter);
-      if (params.toString()) url += "?" + params.toString();
       const data = await apiRequest<Note[] | { notes?: Note[]; data?: Note[] }>(
-        url,
+        "/notes",
+        { signal: request.signal },
       );
-      if (version !== browseRequest.current) return;
-      const items = Array.isArray(data) ? data : data.notes || data.data || [];
-      if (!params.size) setCompleteNotes(items);
-      setNotes(
-        selectedCollectionFilter === uncategorized
-          ? items.filter(
-              (note) => !note.collections?.length && !note.collection,
-            )
-          : items,
+      if (sessionSignal.aborted || request.signal.aborted) return;
+      setCompleteNotes(
+        Array.isArray(data) ? data : data.notes || data.data || [],
       );
+      notesFetchedAt.current = Date.now();
     } catch {
-      if (!sessionSignal.aborted && version === browseRequest.current)
+      if (!sessionSignal.aborted && !request.signal.aborted)
         showNotification("Failed to load notes.", "error");
     } finally {
-      if (!sessionSignal.aborted && version === browseRequest.current)
+      if (notesRequest.current === request) {
+        notesRequest.current = null;
         setIsLoadingNotes(false);
+      }
     }
   };
 
@@ -653,7 +645,12 @@ function App() {
       const data = await apiRequest<Collection[] | { data?: Collection[] }>(
         "/collections",
       );
-      setCollections(Array.isArray(data) ? data : data.data || []);
+      if (sessionSignal.aborted) return;
+      const items = Array.isArray(data) ? data : data.data || [];
+      setCollections((current) => [
+        ...items,
+        ...current.filter(({ _id }) => !items.some((item) => item._id === _id)),
+      ]);
     } catch {
       // ignore
     }
@@ -676,7 +673,11 @@ function App() {
         "Could not confirm collection creation. Refresh your collections before retrying.",
       );
     }
-    setCollections((previous) => [...previous, collection]);
+    setCollections((previous) =>
+      previous.some(({ _id }) => _id === collection._id)
+        ? previous
+        : [...previous, collection],
+    );
     showNotification("Collection created.", "success");
     return collection;
   };
@@ -1079,7 +1080,7 @@ function App() {
       fetchCollections();
     }
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionKey, selectedTagFilter, selectedCollectionFilter]);
+  }, [sessionKey]);
 
   useEffect(() => {
     if (!sessionKey) return;
@@ -1186,15 +1187,33 @@ function App() {
   }
 
   // --- Main app ---
+  const notes = completeNotes ?? [];
+  const collectionNotes = selectedCollectionFilter
+    ? notes.filter((note) =>
+        selectedCollectionFilter === uncategorized
+          ? !note.collections?.length && !note.collection
+          : note.collections?.some(
+              ({ _id }) => _id === selectedCollectionFilter,
+            ),
+      )
+    : notes;
   const displayNotes = isSearching
     ? searchResults
     : favoritesView
       ? favorites.favorites
-      : notes;
+      : collectionNotes;
   const browseFilter = (id: string | null) => {
     setIsSearching(false);
     setFavoritesView(id === favoritesFilter);
-    if (id !== favoritesFilter) setSelectedCollectionFilter(id);
+    if (id !== favoritesFilter) {
+      setSelectedCollectionFilter(id);
+      if (
+        !notesRequest.current &&
+        (notesFetchedAt.current === null ||
+          Date.now() - notesFetchedAt.current >= notesFreshForMs)
+      )
+        void fetchNotes();
+    }
     showBrowse();
   };
   const plan =
@@ -1202,10 +1221,7 @@ function App() {
       ? bulkImportAccess.plan
       : undefined;
   const counts =
-    !isLoadingNotes &&
-    !selectedCollectionFilter &&
-    !selectedTagFilter &&
-    completeNotes
+    !selectedCollectionFilter && completeNotes
       ? new Map<string, number>()
       : null;
   if (counts && completeNotes) {
@@ -1362,7 +1378,9 @@ function App() {
             selectedNoteId={editor?.note?._id ?? selectedNote?._id}
             isLoading={
               !isSearching &&
-              (favoritesView ? favorites.loading : isLoadingNotes) &&
+              (favoritesView
+                ? favorites.loading
+                : isLoadingNotes && !completeNotes) &&
               displayNotes.length === 0
             }
             isSearching={isSearching}
@@ -1443,7 +1461,9 @@ function App() {
               favorites={favorites}
               isLoadingNote={isLoadingNote}
               onCreateNote={() => beginEditor()}
-              hasNotes={notes.length > 0 || Boolean(selectedCollectionFilter)}
+              hasNotes={
+                collectionNotes.length > 0 || Boolean(selectedCollectionFilter)
+              }
               onEditNote={beginEditor}
               onDeleteNote={requestDelete}
               deletingNoteId={deletingNoteId}
