@@ -161,6 +161,7 @@ test("bulk imports Markdown through the proxy and downloads the full export", as
     { name: "devmind-access", value: "test-cookie", url: origin },
   ]);
   await page.goto(origin);
+  await page.getByRole("button", { name: "Import md", exact: true }).click();
   await page.getByRole("button", { name: "Bulk import" }).click();
   const dialog = page.getByRole("dialog", { name: "Bulk Markdown import" });
   await dialog.locator('input[type="file"]').setInputFiles({
@@ -175,7 +176,8 @@ test("bulk imports Markdown through the proxy and downloads the full export", as
   ]);
   await dialog.getByRole("button", { name: "Close" }).click();
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export Markdown" }).click();
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("button", { name: "Export all notes" }).click();
   const file = await download;
   expect(file.suggestedFilename()).toBe("devmind-notes.md");
   expect(await readFile(await file.path(), "utf8")).toBe(

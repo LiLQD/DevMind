@@ -148,8 +148,11 @@ for (const outcome of ["abort", "late success", "late error"]) {
 
     try {
       await page.goto("/");
-      const filter = page.getByRole("combobox", {
-        name: "Filter notes by collection",
+      const filter = page.getByRole("navigation", {
+        name: "Notes and collections",
+      });
+      const collectionA = filter.getByRole("button", {
+        name: new RegExp(accountA.collection.name),
       });
       const mode = page.getByRole("combobox", { name: "Search mode" });
       const query = page.getByRole("textbox", { name: "Search notes" });
@@ -158,7 +161,8 @@ for (const outcome of ["abort", "late success", "late error"]) {
       ).toBeVisible();
       await expect(filter).toBeVisible();
       holdCollectionsA = true;
-      await filter.selectOption(accountA.collection._id);
+      await collectionA.click();
+      await expect(collectionA).toHaveAttribute("aria-pressed", "true");
       await mode.selectOption("exact");
       await query.fill("account A query");
       await page.getByRole("button", { name: "Search", exact: true }).click();
@@ -172,7 +176,9 @@ for (const outcome of ["abort", "late success", "late error"]) {
         ),
       );
 
-      await page.getByRole("button", { name: "Logout" }).click();
+      await page.getByRole("button", { name: "Account menu" }).click();
+
+      await page.getByRole("button", { name: "Log out" }).click();
       await page.getByLabel("Email").fill("b@example.com");
       await page.getByLabel("Password").fill("test-password");
       await page.getByRole("button", { name: "Sign in", exact: true }).click();
@@ -181,7 +187,9 @@ for (const outcome of ["abort", "late success", "late error"]) {
         page.getByRole("button", { name: accountB.note.title }),
       ).toBeVisible();
       expect(notesFiltersB).toEqual([null]);
-      await expect(filter).toHaveValue("");
+      await expect(
+        filter.getByRole("button", { name: "Notes", exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
       await expect(mode).toHaveValue("semantic");
       await expect(query).toBeEmpty();
       await query.fill("account B query");
@@ -208,9 +216,7 @@ for (const outcome of ["abort", "late success", "late error"]) {
       await expect(
         page.getByRole("button", { name: accountA.note.title }),
       ).toHaveCount(0);
-      await expect(
-        filter.getByRole("option", { name: accountA.collection.name }),
-      ).toHaveCount(0);
+      await expect(collectionA).toHaveCount(0);
       await expect(page.getByText("Account A late search error")).toHaveCount(
         0,
       );

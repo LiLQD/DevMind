@@ -7,8 +7,6 @@ export type NoteListProps = {
   selectedNoteId?: string;
   isLoading: boolean;
   onViewNote: (id: string) => void;
-  onEditNote: (note: Note) => void;
-  onDeleteNote: (note: Note) => void;
   emptyMessage: string;
   emptyHint: string;
 };
@@ -22,8 +20,6 @@ export default function NoteList({
   selectedNoteId,
   isLoading,
   onViewNote,
-  onEditNote,
-  onDeleteNote,
   emptyMessage,
   emptyHint,
 }: NoteListProps) {
@@ -60,8 +56,6 @@ export default function NoteList({
           exactSearchQuery={exactSearchQuery}
           isActive={note._id === selectedNoteId}
           onView={() => onViewNote(note._id)}
-          onEdit={() => onEditNote(note)}
-          onDelete={() => onDeleteNote(note)}
         />
       ))}
     </div>
