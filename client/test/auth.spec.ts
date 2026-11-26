@@ -192,3 +192,54 @@ test("registration explains an invalid name and displays API validation feedback
   await expect(submit).toBeEnabled();
   expect(attempts).toBe(1);
 });
+
+test("requests a verification email before collecting a password and finishes from the link", async ({
+  page,
+}) => {
+  const token = "a".repeat(43);
+  await page.route("**/api/auth/register/status", (route) =>
+    route.fulfill({ json: { emailVerificationRequired: true } }),
+  );
+  await page.route("**/api/auth/register/email", (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      email: "developer@example.com",
+    });
+    return route.fulfill({ status: 202, json: { accepted: true } });
+  });
+  await page.route("**/api/auth/register", (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      name: "Test Developer",
+      password: "test-password",
+      verificationToken: token,
+    });
+    return route.fulfill({
+      status: 201,
+      json: { user: { id: "developer", name: "Test Developer" } },
+    });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Create an account" }).click();
+  const send = page.getByRole("button", { name: "Send verification email" });
+  await expect(send).toBeVisible();
+  await expect(page.getByLabel("Password")).toHaveCount(0);
+  await page.getByLabel("Email").fill("developer@example.com");
+  await send.click();
+  await expect(page.getByRole("status")).toContainText("check your inbox");
+  await expect(
+    page.getByRole("button", { name: "Resend verification email" }),
+  ).toBeVisible();
+
+  await page.goto(`/?from=email#verify-email=${token}`);
+  await expect(
+    page.getByRole("heading", { name: "Finish creating your account" }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/\/\?from=email$/);
+  await expect(page.getByLabel("Email")).toHaveCount(0);
+  await page.getByLabel("Name").fill("Test Developer");
+  await page.getByLabel("Password").fill("test-password");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(
+    page.getByRole("main", { name: "Notes workspace" }),
+  ).toBeVisible();
+});

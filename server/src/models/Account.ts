@@ -10,6 +10,7 @@ const accountSchema = new mongoose.Schema(
       lowercase: true,
     },
     password: { type: String },
+    emailVerifiedAt: { type: Date, select: false },
     identities: {
       google: { type: String, select: false },
       github: { type: String, select: false },
