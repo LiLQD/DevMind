@@ -13,6 +13,7 @@ export default function AccountMenu({
   onExport,
   exporting,
   onLogout,
+  onSignInMethods,
 }: {
   name: string;
   email?: string;
@@ -23,6 +24,7 @@ export default function AccountMenu({
   onExport: () => void;
   exporting: boolean;
   onLogout: () => void;
+  onSignInMethods: () => void;
 }) {
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const appearance = useRef<HTMLButtonElement>(null);
@@ -113,6 +115,9 @@ export default function AccountMenu({
         <WorkspaceIcon name="info" /> Learn more
       </button>
       <div className="account-menu-divider" role="separator" />
+      <button type="button" onClick={onSignInMethods}>
+        <WorkspaceIcon name="settings" /> Sign-in methods
+      </button>
       {planControl}
       <button type="button" onClick={onExport} disabled={exporting}>
         <WorkspaceIcon name="import" />{" "}

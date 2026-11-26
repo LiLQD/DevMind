@@ -109,7 +109,10 @@ async function draft(page: Page) {
 }
 
 async function expireAccess(context: BrowserContext) {
-  await context.clearCookies({ name: accessCookie });
+  // Filtered clearCookies removes the whole jar before restoring other cookies.
+  await context.addCookies([
+    { name: accessCookie, value: "", url: origin, expires: 1 },
+  ]);
 }
 
 test("restores on reload and retries a note save rejected before side effects", async ({

@@ -86,7 +86,7 @@ export const login: RequestHandler = async (req, res) => {
 
     const { email, password } = credentials;
     const account = await Account.findOne({ email });
-    if (!account || account.isActive === false) {
+    if (!account || !account.password || account.isActive === false) {
       return res
         .status(401)
         .json({ message: "Email hoặc mật khẩu không đúng" });
