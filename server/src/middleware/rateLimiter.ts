@@ -33,3 +33,16 @@ export const searchLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+export const suggestionLimiter = rateLimit({
+  store: new RedisStore({
+    sendCommand,
+    prefix: "devmind:rate-limit:suggestions:",
+  }),
+  keyGenerator: (req) => req.user!.id.toString(),
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  message: { message: "Suggestion limit reached. Try again in an hour." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});

@@ -1726,3 +1726,23 @@ button:disabled {
   gap: var(--space-2);
   margin-block: var(--space-3);
 }
+
+.editor-suggestions {
+  display: grid;
+  justify-items: start;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.editor-suggestion-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.editor-suggestions button,
+.editor-suggestion-row button {
+  font-size: 0.85rem;
+  padding: 0.35rem 0.65rem;
+}

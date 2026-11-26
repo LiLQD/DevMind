@@ -117,6 +117,21 @@ The frontend starts on `http://localhost:5173` and proxies `/api` to the
 local backend. Set `DEVMIND_DEV_API_ORIGIN` if the backend listens on another
 origin. Include the exact Vite origin in the backend’s `COOKIE_AUTH_ORIGINS`.
 
+### AI-assisted note organization
+
+In the note editor, choose **Suggest tags & collection** for a typed draft or
+a single imported Markdown file. DevMind sends the draft title, up to 2,400
+characters of content, and up to 40 tag names and 40 collection names from
+your account to Gemini. You can accept or dismiss individual suggestions or apply them together.
+Accepted suggestions are saved through the normal note form.
+
+The backend defaults to Gemini 3.1 Flash-Lite. Set
+`GEMINI_SUGGESTION_MODEL` to another Gemini text model that supports
+structured JSON for your key. Set `GEMINI_SUGGESTION_TIMEOUT_MS` to change
+the default 10,000 ms generation deadline. Each account can request
+suggestions up to 10 times per hour. Generation attempts have a separate
+internal usage counter and do not use semantic-search quota.
+
 ### Mock checkout
 
 For local billing simulation, set `NODE_ENV=development` and
