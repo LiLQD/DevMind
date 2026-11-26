@@ -153,6 +153,19 @@ async function mockWorkspace(page: Page, plan: "free" | "pro" = "free") {
       }
       const id = path.split("/").at(-1);
       const note = notes.find(({ _id }) => _id === id);
+      if (method === "PUT" && note) {
+        const {
+          collections: ids,
+          title,
+          content,
+        } = route.request().postDataJSON();
+        Object.assign(note, {
+          title,
+          content,
+          collections: collections.filter(({ _id }) => ids?.includes(_id)),
+        });
+        return reply(note);
+      }
       if (method === "DELETE") {
         notes = notes.filter(({ _id }) => _id !== id);
         return reply({});
@@ -171,6 +184,58 @@ const button = (page: Page, name: string) =>
   page.getByRole("button", { name, exact: true });
 const openNote = (page: Page) => button(page, seed[0].title).click();
 const captureDir = process.env.DEVMIND_WORKSPACE_SCREENSHOTS;
+
+test("switches collections from memory during refresh and updates membership after a move", async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(new Date("2026-11-26T12:00:00Z"));
+  const requests = await mockWorkspace(page);
+  await expect(button(page, seed[0].title)).toBeVisible();
+  const navigation = page.getByRole("navigation", {
+    name: "Notes and collections",
+  });
+  const backend = navigation.getByRole("button", { name: /Backend/ });
+  const frontend = navigation.getByRole("button", { name: /Frontend/ });
+  const system = navigation.getByRole("button", { name: /System Design/ });
+  let refreshes = 0;
+  const release = Promise.withResolvers<void>();
+  await page.route("**/api/notes", async (route) => {
+    refreshes++;
+    await release.promise;
+    await route.fallback();
+  });
+
+  try {
+    await page.clock.setFixedTime(new Date("2026-11-26T12:01:00Z"));
+    await backend.click();
+    await expect(button(page, seed[1].title)).toBeVisible();
+    await expect.poll(() => refreshes).toBe(1);
+    await frontend.click();
+    await expect(button(page, seed[4].title)).toBeVisible();
+    await expect(button(page, seed[1].title)).toHaveCount(0);
+    await system.click();
+    await expect(button(page, seed[0].title)).toBeVisible();
+    expect(refreshes).toBe(1);
+    expect(
+      requests.filter((request) => request === "GET /api/collections"),
+    ).toHaveLength(1);
+  } finally {
+    release.resolve();
+  }
+
+  await openNote(page);
+  await button(page, "Edit").click();
+  await page.getByLabel("Collection", { exact: true }).selectOption("backend");
+  await button(page, "Save changes").click();
+  const browse = page.getByRole("complementary", { name: "Browse notes" });
+  const movedNote = browse.getByRole("button", {
+    name: seed[0].title,
+    exact: true,
+  });
+  await expect(movedNote).toHaveCount(0);
+  await backend.click();
+  await expect(movedNote).toBeVisible();
+});
 
 test("collapses panels independently and restores the exact layout and draft after focus mode", async ({
   page,
