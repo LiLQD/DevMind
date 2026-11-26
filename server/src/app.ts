@@ -23,6 +23,23 @@ export function createApp() {
   const app = express();
   app.set("trust proxy", env.TRUST_PROXY);
 
+  app.use((req, res, next) => {
+    const startedAt = performance.now();
+    const { method, path } = req;
+
+    res.once("finish", () => {
+      console.log(
+        JSON.stringify({
+          method,
+          path,
+          status: res.statusCode,
+          durationMs: Math.round(performance.now() - startedAt),
+        }),
+      );
+    });
+    next();
+  });
+
   // Middleware
   app.use(helmet());
   app.use("/api", (_req, res, next) => {
@@ -32,12 +49,6 @@ export function createApp() {
   if (!env.MOCK_BILLING_ENABLED) app.use("/api/mock-billing", notFound);
   app.use("/api", requireCookieOrigin);
   app.use(express.json({ limit: "1mb" }));
-
-  // Logging
-  app.use((req, res, next) => {
-    console.log(req.method);
-    next();
-  });
 
   // Rate limiting
   app.use("/api", generalLimiter);
