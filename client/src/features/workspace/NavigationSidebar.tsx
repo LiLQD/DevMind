@@ -1,7 +1,8 @@
-import { useState } from "react";
 import type { ReactNode } from "react";
 import type { Collection } from "../../types";
 import Disclosure from "./Disclosure";
+import CollectionPopover from "./CollectionPopover";
+import { PanelControl } from "./WorkspaceShell";
 import WorkspaceIcon from "./WorkspaceIcon";
 import type { WorkspaceIconName } from "./WorkspaceIcon";
 
@@ -20,15 +21,12 @@ export default function NavigationSidebar({
   collections: Collection[];
   active: string | null;
   onFilter: (value: string | null) => void;
-  onCreate: (name: string) => Promise<Collection | null>;
+  onCreate: (name: string) => Promise<Collection>;
   onImport: () => void;
   bulkImport: ReactNode;
   account: ReactNode;
   counts: ReadonlyMap<string, number> | null;
 }) {
-  const [creating, setCreating] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [name, setName] = useState("");
   function filter(id: string | null, label: string, icon: WorkspaceIconName) {
     return (
       <button
@@ -53,6 +51,7 @@ export default function NavigationSidebar({
     <aside className="primary-navigation" aria-label="Primary navigation">
       <div className="workspace-brand">
         <WorkspaceIcon name="brand" /> <strong>DevMind</strong>
+        <PanelControl panel="navigation" />
       </div>
       <nav aria-label="Notes and collections" className="navigation-scroll">
         {filter(null, "Notes", "note")}
@@ -90,6 +89,7 @@ export default function NavigationSidebar({
           <button
             type="button"
             className="nav-item"
+            aria-label="Import md"
             data-close-drawer
             onClick={onImport}
           >
@@ -101,53 +101,12 @@ export default function NavigationSidebar({
         )}
         <div className="nav-collections-heading">
           <span>Collections</span>
-          <button
-            type="button"
-            className="secondary-btn"
-            aria-label="Create collection"
-            aria-expanded={creating}
-            onClick={() => setCreating(!creating)}
-          >
-            +
-          </button>
+          <CollectionPopover onCreate={onCreate} />
         </div>
-        {creating && (
-          <form
-            className="nav-create-collection"
-            onSubmit={async (event) => {
-              event.preventDefault();
-              if (!name.trim() || pending) return;
-              setPending(true);
-              try {
-                const collection = await onCreate(name);
-                if (collection) {
-                  setName("");
-                  setCreating(false);
-                  onFilter(collection._id);
-                }
-              } finally {
-                setPending(false);
-              }
-            }}
-          >
-            <input
-              aria-label="New collection name"
-              value={name}
-              maxLength={100}
-              onChange={(event) => setName(event.target.value)}
-            />
-            <button
-              className="secondary-btn"
-              disabled={!name.trim() || pending}
-            >
-              {pending ? "Creating…" : "Create"}
-            </button>
-          </form>
-        )}
         {collections.map((item) => (
           <div key={item._id}>{filter(item._id, item.name, "collection")}</div>
         ))}
-        {filter(uncategorized, "Uncategorized", "archive")}
+        <div>{filter(uncategorized, "Uncategorized", "archive")}</div>
       </nav>
       {account}
     </aside>

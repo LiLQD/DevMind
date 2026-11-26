@@ -5,7 +5,10 @@ import {
   readingDate,
   wordCount,
 } from "../features/workspace/NoteDetails";
-import { FocusControl } from "../features/workspace/WorkspaceShell";
+import {
+  FocusControl,
+  PanelControl,
+} from "../features/workspace/WorkspaceShell";
 import WorkspaceIcon from "../features/workspace/WorkspaceIcon";
 import NoteMarkdown from "./NoteMarkdown";
 
@@ -41,12 +44,15 @@ export default function NoteView({
   if (!selectedNote) {
     return (
       <div className="main-empty">
+        <span className="reader-empty-icon">
+          <WorkspaceIcon name="note" />
+        </span>
         <h1 className="main-empty-title">
           {hasNotes ? "Choose a note" : "Save your first fix"}
         </h1>
         <p>
           {hasNotes
-            ? "Open a note from the list, or search for a symptom or exact error."
+            ? "Select a note from your workspace or create a new one."
             : "Capture an error, what caused it, and the solution you want to find again."}
         </p>
         <button type="button" className="primary-btn" onClick={onCreateNote}>
@@ -80,6 +86,7 @@ export default function NoteView({
           >
             Share
           </button>
+          <PanelControl panel="details" reopening />
           <FocusControl />
           <Disclosure
             key={selectedNote._id}

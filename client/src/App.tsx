@@ -156,8 +156,8 @@ function App() {
   const [newCollectionName, setNewCollectionName] = useState("");
 
   // --- UI state ---
-  const [theme, setTheme] = useState(
-    localStorage.getItem("devmind-theme") || "light",
+  const [theme, setTheme] = useState<"light" | "dark">(() =>
+    document.documentElement.dataset.theme === "dark" ? "dark" : "light",
   );
   const [notification, setNotification] = useState<NotificationState | null>(
     null,
@@ -251,9 +251,13 @@ function App() {
     [],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem("devmind-theme", theme);
+    try {
+      localStorage.setItem("devmind-theme", theme);
+    } catch {
+      /* Theme still applies for this session. */
+    }
   }, [theme]);
 
   // --- API helper ---
@@ -560,24 +564,33 @@ function App() {
   };
 
   const createCollection = async (name: string) => {
+    const data = await apiRequest<ResourceResponse<Collection, "collection">>(
+      "/collections",
+      { method: "POST", body: JSON.stringify({ name: name.trim() }) },
+    );
+    const collection = unwrapResource<Collection, "collection">(
+      data,
+      "collection",
+    );
+    if (
+      typeof collection?._id !== "string" ||
+      typeof collection.name !== "string"
+    ) {
+      throw new Error(
+        "Could not confirm collection creation. Refresh your collections before retrying.",
+      );
+    }
+    setCollections((previous) => [...previous, collection]);
+    showNotification("Collection created.", "success");
+    return collection;
+  };
+
+  const createEditorCollection = async (name: string) => {
     if (!name.trim()) return null;
     try {
-      const data = await apiRequest<ResourceResponse<Collection, "collection">>(
-        "/collections",
-        {
-          method: "POST",
-          body: JSON.stringify({ name: name.trim() }),
-        },
-      );
-      const newCol = unwrapResource<Collection, "collection">(
-        data,
-        "collection",
-      );
-      setCollections((prev) => [...prev, newCol]);
-      showNotification("Collection created.", "success");
-      return newCol;
-    } catch (err) {
-      showNotification(errorMessage(err), "error");
+      return await createCollection(name);
+    } catch (error) {
+      showNotification(errorMessage(error), "error");
       return null;
     }
   };
@@ -1085,9 +1098,7 @@ function App() {
       email={user?.email}
       plan={plan}
       theme={theme}
-      onTheme={() =>
-        setTheme((value) => (value === "light" ? "dark" : "light"))
-      }
+      onTheme={setTheme}
       onExport={exportNotes}
       exporting={isExportingNotes}
       onLogout={() => leaveEditor(handleLogout)}
@@ -1244,7 +1255,7 @@ function App() {
                     signal: AbortSignal.any([sessionSignal, signal]),
                   })
                 }
-                onCreateCollection={createCollection}
+                onCreateCollection={createEditorCollection}
               />
             </>
           ) : (

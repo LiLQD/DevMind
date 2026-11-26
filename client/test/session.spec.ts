@@ -154,7 +154,8 @@ for (const outcome of ["abort", "late success", "late error"]) {
       const collectionA = filter.getByRole("button", {
         name: new RegExp(accountA.collection.name),
       });
-      const mode = page.getByRole("combobox", { name: "Search mode" });
+      const semantic = page.getByRole("radio", { name: "Semantic" });
+      const exact = page.getByRole("radio", { name: "Exact" });
       const query = page.getByRole("textbox", { name: "Search notes" });
       await expect(
         page.getByRole("button", { name: accountA.note.title }),
@@ -163,7 +164,7 @@ for (const outcome of ["abort", "late success", "late error"]) {
       holdCollectionsA = true;
       await collectionA.click();
       await expect(collectionA).toHaveAttribute("aria-pressed", "true");
-      await mode.selectOption("exact");
+      await exact.check();
       await query.fill("account A query");
       await page.getByRole("button", { name: "Search", exact: true }).click();
       await expect.poll(() => heldA.size).toBe(pathsA.length);
@@ -190,7 +191,7 @@ for (const outcome of ["abort", "late success", "late error"]) {
       await expect(
         filter.getByRole("button", { name: "Notes", exact: true }),
       ).toHaveAttribute("aria-pressed", "true");
-      await expect(mode).toHaveValue("semantic");
+      await expect(semantic).toBeChecked();
       await expect(query).toBeEmpty();
       await query.fill("account B query");
       await page.getByRole("button", { name: "Search", exact: true }).click();

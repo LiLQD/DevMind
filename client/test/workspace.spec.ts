@@ -222,11 +222,22 @@ test("handles account keyboard navigation, placeholders, search, collection filt
   await page.keyboard.press("Escape");
   await expect(trigger).toBeFocused();
   await trigger.click();
-  await page.getByRole("button", { name: /Appearance.*Dark mode/ }).click();
+  await button(page, "Appearance").click();
+  await expect(button(page, "Light")).toHaveAttribute("aria-pressed", "true");
+  await button(page, "Dark").click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await expect(button(page, "Dark")).toHaveAttribute("aria-pressed", "true");
+  await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await trigger.click();
-  await page.getByRole("button", { name: /Appearance.*Light mode/ }).click();
+  await button(page, "Appearance").click();
+  await expect(button(page, "Dark")).toHaveAttribute("aria-pressed", "true");
+  await button(page, "Light").click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.keyboard.press("Escape");
+  await expect(button(page, "Appearance")).toBeFocused();
+  await openNote(page);
   await trigger.click();
   await page.getByRole("heading", { name: seed[0].title }).click();
   await expect(trigger).toHaveAttribute("aria-expanded", "false");
@@ -236,11 +247,16 @@ test("handles account keyboard navigation, placeholders, search, collection filt
     .click();
   await expect(button(page, seed[1].title)).toBeVisible();
   await expect(button(page, seed[0].title)).toBeHidden();
-  await page
-    .getByRole("combobox", { name: "Search mode" })
-    .selectOption("exact");
-  await page.getByRole("textbox", { name: "Search notes" }).fill("Practical");
-  await button(page, "Search").click();
+  await page.getByRole("radio", { name: "Exact" }).check();
+  const searchField = page.getByRole("textbox", { name: "Search notes" });
+  const searchCount = requests.filter(
+    (entry) => entry === "POST /api/notes/search",
+  ).length;
+  await searchField.fill("Practical");
+  expect(
+    requests.filter((entry) => entry === "POST /api/notes/search"),
+  ).toHaveLength(searchCount);
+  await searchField.press("Enter");
   await expect(page.locator(".note-open mark")).toHaveText([
     "Practical",
     "practical",
@@ -336,3 +352,139 @@ test("keeps the workspace within the viewport at all seven target widths", async
     }
   }
 });
+
+test("creates a collection through the anchored popover and preserves input on failure", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockWorkspace(page);
+  let attempts = 0;
+  const release = Promise.withResolvers<void>();
+  await page.route("**/api/collections", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    attempts += 1;
+    expect(route.request().postDataJSON()).toEqual({ name: "Shared notes" });
+    if (attempts === 1) {
+      await release.promise;
+      return route.fulfill({
+        status: 409,
+        json: { message: "Collection already exists." },
+      });
+    }
+    return route.fulfill({
+      status: 201,
+      json: { collection: { _id: "new", name: "Shared notes" } },
+    });
+  });
+  await button(page, "Show navigation").click();
+  const selectedCollection = page.getByRole("button", {
+    name: /^System Design(?: \d+)?$/,
+  });
+  await selectedCollection.click();
+  await button(page, "Show navigation").click();
+  await expect(selectedCollection).toHaveAttribute("aria-pressed", "true");
+  const plus = button(page, "Create collection");
+  const name = page.getByLabel("Collection name", { exact: true });
+  const form = page.getByRole("form", { name: "New collection" });
+  await expect(form).toBeHidden();
+  await plus.click();
+  await expect(name).toBeFocused();
+  await expect(button(page, "Create")).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(form).toBeHidden();
+  await expect(plus).toBeFocused();
+  await plus.click();
+  await page.getByText("DevMind", { exact: true }).click();
+  await expect(form).toBeHidden();
+  await plus.click();
+  await name.fill("Shared notes");
+  try {
+    await name.press("Enter");
+    await expect(button(page, "Creating…")).toBeDisabled();
+    await expect.poll(() => attempts).toBe(1);
+    await name.press("Enter");
+    expect(attempts).toBe(1);
+  } finally {
+    release.resolve();
+  }
+  await expect(form.getByRole("alert")).toHaveText(
+    "Collection already exists.",
+  );
+  await expect(name).toHaveValue("Shared notes");
+  await name.press("Enter");
+  await expect(form).toBeHidden();
+  await expect(plus).toBeFocused();
+  await expect(selectedCollection).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.getByRole("button", { name: /Shared notes/ }),
+  ).toHaveAttribute("aria-pressed", "false");
+  expect(attempts).toBe(2);
+});
+
+if (captureDir) {
+  for (const width of [1440, 390]) {
+    for (const theme of ["light", "dark"]) {
+      test(`captures ${width}px ${theme} workspace states`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({
+          width,
+          height: width === 1440 ? 940 : 844,
+        });
+        await page.addInitScript(
+          (value) => localStorage.setItem("devmind-theme", value),
+          theme,
+        );
+        await mockWorkspace(page);
+        const capture = (state: string) =>
+          page.screenshot({
+            path: join(captureDir, `workspace-${width}-${theme}-${state}.png`),
+            animations: "disabled",
+          });
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+        await openNote(page);
+        if (width === 390) await button(page, "Show navigation").click();
+        await button(page, "Account menu").click();
+        await button(page, "Appearance").click();
+        await capture("account");
+        await page.keyboard.press("Escape");
+        await page.keyboard.press("Escape");
+        await button(page, "Create collection").click();
+        await page.getByLabel("Collection name").fill("New collection");
+        await capture("collection");
+        await button(page, "Cancel").click();
+        if (width === 390) await button(page, "Close navigation").click();
+        else {
+          await button(page, "Collapse navigation").click();
+          await capture("collapsed");
+          await button(page, "Show navigation").click();
+        }
+        await button(page, "Edit").click();
+        await capture("editor");
+        const emptyPage = await page.context().newPage();
+        await emptyPage.setViewportSize({
+          width,
+          height: width === 1440 ? 940 : 844,
+        });
+        await mockWorkspace(emptyPage);
+        // At phone widths browsing is intentionally the first view.
+        if (width === 1440) {
+          await expect(
+            emptyPage.getByRole("heading", { name: "Choose a note" }),
+          ).toBeVisible();
+          await emptyPage.screenshot({
+            path: join(captureDir, `workspace-${width}-${theme}-empty.png`),
+            animations: "disabled",
+          });
+        } else {
+          await expect(button(emptyPage, seed[0].title)).toBeVisible();
+          await emptyPage.screenshot({
+            path: join(captureDir, `workspace-${width}-${theme}-browse.png`),
+            animations: "disabled",
+          });
+        }
+        await emptyPage.close();
+      });
+    }
+  }
+}
