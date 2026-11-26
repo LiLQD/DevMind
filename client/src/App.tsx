@@ -35,6 +35,8 @@ import BulkImportPanel from "./features/bulk-import/BulkImportPanel";
 import SearchBar from "./components/SearchBar";
 import {
   authenticateCookieSession,
+  registrationRequiresEmail,
+  requestRegistrationEmail,
   followOAuthAuthorization,
   oauthSignInAvailable,
   startOAuthSignIn,
@@ -231,7 +233,21 @@ function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [isLogin, setIsLogin] = useState(true);
+  const [registrationToken, setRegistrationToken] = useState(() =>
+    new URLSearchParams(window.location.hash.slice(1)).get("verify-email"),
+  );
+  const [isLogin, setIsLogin] = useState(registrationToken === null);
+  const [emailVerificationRequired, setEmailVerificationRequired] = useState(
+    registrationToken !== null,
+  );
+  const [verificationRequested, setVerificationRequested] = useState(false);
+  const registrationStep = isLogin
+    ? undefined
+    : registrationToken !== null
+      ? "finish"
+      : emailVerificationRequired
+        ? "email"
+        : undefined;
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [query, setQuery] = useState("");
@@ -354,6 +370,13 @@ function App() {
 
   useEffect(() => {
     const controller = new AbortController();
+    void registrationRequiresEmail(controller.signal).then(
+      (required) => {
+        if (!controller.signal.aborted && required)
+          setEmailVerificationRequired(true);
+      },
+      () => {},
+    );
     for (const provider of oauthProviders) {
       void oauthSignInAvailable(provider, controller.signal).then(
         (enabled) => {
@@ -364,8 +387,15 @@ function App() {
       );
     }
     const url = new URL(window.location.href);
-    if (oauthProviders.some((provider) => url.searchParams.has(provider))) {
+    const oauthCallback = oauthProviders.some((provider) =>
+      url.searchParams.has(provider),
+    );
+    const emailCallback = new URLSearchParams(url.hash.slice(1)).has(
+      "verify-email",
+    );
+    if (oauthCallback || emailCallback) {
       for (const provider of oauthProviders) url.searchParams.delete(provider);
+      if (emailCallback) url.hash = "";
       window.history.replaceState(
         window.history.state,
         "",
@@ -401,7 +431,7 @@ function App() {
   const handleAuth = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (authPendingRef.current) return;
-    if (!isLogin && !name.trim()) {
+    if (!isLogin && registrationStep !== "email" && !name.trim()) {
       setAuthError("Enter your name.");
       return;
     }
@@ -412,19 +442,40 @@ function App() {
     setOAuthFeedback("");
     setAuthError("");
     try {
+      if (registrationStep === "email") {
+        await requestRegistrationEmail(email);
+        setVerificationRequested(true);
+        return;
+      }
       const endpoint = isLogin ? "/auth/login" : "/auth/register";
-      const payload = isLogin ? { email, password } : { email, password, name };
+      const payload = isLogin
+        ? { email, password }
+        : registrationStep === "finish"
+          ? { name, password, verificationToken: registrationToken }
+          : { email, password, name };
       const current = await authenticateCookieSession(endpoint, payload);
       adoptCookieSession(current);
       cookieChannelRef.current?.postMessage("session-changed");
       setEmail("");
       setPassword("");
       setName("");
+      setRegistrationToken(null);
+      setVerificationRequested(false);
+      setIsLogin(true);
       showNotification(
         isLogin ? "Welcome back." : "Account created.",
         "success",
       );
     } catch (error) {
+      if (
+        error instanceof CookieAuthError &&
+        error.code === "REGISTRATION_EMAIL_VERIFICATION_REQUIRED"
+      ) {
+        setEmailVerificationRequired(true);
+        setRegistrationToken(null);
+        setVerificationRequested(false);
+        setPassword("");
+      }
       if (
         error instanceof CookieAuthError &&
         [400, 401, 422, 429, 500].includes(error.status) &&
@@ -1180,9 +1231,14 @@ function App() {
     return (
       <AuthPage
         isLogin={isLogin}
+        registrationStep={registrationStep}
+        verificationRequested={verificationRequested}
         onSwitchMode={() => {
           if (authPendingRef.current) return;
           setAuthError("");
+          setRegistrationToken(null);
+          setVerificationRequested(false);
+          if (registrationStep) setPassword("");
           setIsLogin((value) => !value);
         }}
         error={
@@ -1202,7 +1258,10 @@ function App() {
           setOAuthReturn(null);
         }}
         email={email}
-        setEmail={setEmail}
+        setEmail={(value) => {
+          setEmail(value);
+          setVerificationRequested(false);
+        }}
         password={password}
         setPassword={setPassword}
         name={name}

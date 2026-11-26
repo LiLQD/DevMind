@@ -3,6 +3,15 @@ import type { RequestHandler } from "express";
 import bcrypt from "bcrypt";
 import { startCookieSession } from "./cookie-auth.controller.ts";
 import { sessionUnavailable } from "../middleware/cookie-auth.middleware.ts";
+import {
+  normalizeRegistrationEmail,
+  registrationEmail,
+} from "../config/registration-email.ts";
+import {
+  consumeRegistrationToken,
+  reserveRegistrationEmail,
+  sendRegistrationEmail,
+} from "../services/registration-email.service.ts";
 
 type Credentials = { email?: unknown; password?: unknown };
 
@@ -27,21 +36,80 @@ function isDuplicateKey(error: unknown) {
   );
 }
 
+export const registrationStatus: RequestHandler = (_req, res) => {
+  res.json({ emailVerificationRequired: Boolean(registrationEmail) });
+};
+
+export const requestRegistrationEmail: RequestHandler = async (req, res) => {
+  if (!registrationEmail) return res.sendStatus(404);
+  if (req.get("Origin") !== registrationEmail.appOrigin)
+    return res.sendStatus(403);
+  const email = normalizeRegistrationEmail(req.body?.email);
+  if (!email)
+    return res.status(400).json({ message: "Enter a valid email address." });
+
+  try {
+    const available = await reserveRegistrationEmail(email);
+    if (!available) {
+      res.set("Retry-After", "60");
+      return res.status(429).json({
+        message: "Wait a minute before requesting another verification email.",
+      });
+    }
+    if (!(await Account.exists({ email }))) await sendRegistrationEmail(email);
+    return res.status(202).json({ accepted: true });
+  } catch {
+    console.error("Registration email request failed.");
+    return res.status(503).json({
+      code: "REGISTRATION_EMAIL_UNAVAILABLE",
+      message: "Could not send the verification email. Try again in a minute.",
+    });
+  }
+};
+
 export const register: RequestHandler = async (req, res) => {
   try {
-    const credentials: Credentials & { name?: unknown } = req.body ?? {};
-    const { name } = credentials;
+    const {
+      email: submittedEmail,
+      name,
+      password,
+      verificationToken,
+    }: {
+      email?: unknown;
+      name?: unknown;
+      password?: unknown;
+      verificationToken?: unknown;
+    } = req.body ?? {};
     if (
-      !validCredentials(credentials) ||
       typeof name !== "string" ||
-      !name.trim()
+      !name.trim() ||
+      typeof password !== "string" ||
+      !password
     ) {
       return res
         .status(400)
         .json({ message: "Enter a name, email, and password." });
     }
 
-    const { email, password } = credentials;
+    let email: string;
+    if (registrationEmail) {
+      if (req.get("Origin") !== registrationEmail.appOrigin)
+        return res.sendStatus(403);
+      const verifiedEmail = await consumeRegistrationToken(verificationToken);
+      if (!verifiedEmail)
+        return res.status(400).json({
+          code: "REGISTRATION_EMAIL_VERIFICATION_REQUIRED",
+          message:
+            "This verification link is missing, expired, or already used. Request a new link.",
+        });
+      email = verifiedEmail;
+    } else {
+      if (typeof submittedEmail !== "string" || !submittedEmail.trim())
+        return res
+          .status(400)
+          .json({ message: "Enter a name, email, and password." });
+      email = submittedEmail;
+    }
     // Keep the raw email value for Mongoose's existing query casting.
     const existing = await Account.findOne({ email });
     if (existing) {
@@ -56,6 +124,7 @@ export const register: RequestHandler = async (req, res) => {
       password: hashedPassword,
       name,
       role: "user",
+      ...(registrationEmail ? { emailVerifiedAt: new Date() } : {}),
     });
 
     await account.save();

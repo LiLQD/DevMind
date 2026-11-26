@@ -7,6 +7,8 @@ import {
 
 type AuthPageProps = {
   isLogin: boolean;
+  registrationStep?: "email" | "finish";
+  verificationRequested: boolean;
   onSwitchMode: () => void;
   error: string;
   isPending: boolean;
@@ -25,6 +27,8 @@ type AuthPageProps = {
 
 export default function AuthPage({
   isLogin,
+  registrationStep,
+  verificationRequested,
   onSwitchMode,
   error,
   isPending,
@@ -40,7 +44,20 @@ export default function AuthPage({
   setName,
   onSubmit,
 }: AuthPageProps) {
-  const pendingLabel = isLogin ? "Signing in…" : "Creating account…";
+  const emailStep = registrationStep === "email";
+  const finishStep = registrationStep === "finish";
+  const pendingLabel = emailStep
+    ? "Sending verification email…"
+    : isLogin
+      ? "Signing in…"
+      : "Creating account…";
+  const submitLabel = emailStep
+    ? verificationRequested
+      ? "Resend verification email"
+      : "Send verification email"
+    : isLogin
+      ? "Sign in"
+      : "Create account";
 
   return (
     <div className="auth-page">
@@ -51,14 +68,24 @@ export default function AuthPage({
         </div>
         <form onSubmit={onSubmit} onChange={onEdit} className="auth-form">
           <div>
-            <h2>{isLogin ? "Sign in" : "Create account"}</h2>
-            <p className="auth-note">
+            <h2>
               {isLogin
-                ? "Access your personal technical knowledge."
-                : "Start building your developer knowledge base."}
+                ? "Sign in"
+                : finishStep
+                  ? "Finish creating your account"
+                  : "Create account"}
+            </h2>
+            <p className="auth-note">
+              {emailStep
+                ? "Enter your email to receive a verification link."
+                : finishStep
+                  ? "Enter your name and choose a password."
+                  : isLogin
+                    ? "Access your personal technical knowledge."
+                    : "Start building your developer knowledge base."}
             </p>
           </div>
-          {!isLogin && (
+          {!isLogin && !emailStep && (
             <label>
               <span>Name</span>
               <input
@@ -71,42 +98,49 @@ export default function AuthPage({
               />
             </label>
           )}
-          <label>
-            <span>Email</span>
-            <input
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              readOnly={isPending}
-              required
-            />
-          </label>
-          <label>
-            <span>Password</span>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              readOnly={isPending}
-              required
-            />
-          </label>
+          {!finishStep && (
+            <label>
+              <span>Email</span>
+              <input
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                readOnly={isPending}
+                required
+              />
+            </label>
+          )}
+          {!emailStep && (
+            <label>
+              <span>Password</span>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                readOnly={isPending}
+                required
+              />
+            </label>
+          )}
           <div className="auth-submit">
             <div className="auth-error" role="alert">
               {error}
             </div>
             <button type="submit" className="primary-btn" disabled={isPending}>
-              {isPending
-                ? pendingLabel
-                : isLogin
-                  ? "Sign in"
-                  : "Create account"}
+              {isPending ? pendingLabel : submitLabel}
             </button>
-            <span className="auth-status" role="status">
-              {isPending ? pendingLabel : ""}
-            </span>
+            {emailStep && verificationRequested && !isPending ? (
+              <p className="auth-note" role="status">
+                If this address can be registered, check your inbox for a
+                verification link.
+              </p>
+            ) : (
+              <span className="auth-status" role="status">
+                {isPending ? pendingLabel : ""}
+              </span>
+            )}
           </div>
           <button
             type="button"
@@ -118,7 +152,7 @@ export default function AuthPage({
           </button>
         </form>
         {oauthProviders
-          .filter((provider) => oauthEnabled[provider])
+          .filter((provider) => !finishStep && oauthEnabled[provider])
           .map((provider) => {
             const name = oauthProviderNames[provider];
             const pending = oauthPending === provider;

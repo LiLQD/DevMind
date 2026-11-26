@@ -46,3 +46,15 @@ export const suggestionLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+export const registrationEmailLimiter = rateLimit({
+  store: new RedisStore({
+    sendCommand,
+    prefix: "devmind:rate-limit:registration-email:",
+  }),
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  message: { message: "Too many email requests. Try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});

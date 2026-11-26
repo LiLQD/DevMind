@@ -186,6 +186,22 @@ export function restoreCookieSession(signal: AbortSignal) {
   return recover(undefined, signal);
 }
 
+export async function registrationRequiresEmail(signal: AbortSignal) {
+  const data = record(await request("/auth/register/status", { signal }));
+  return data?.emailVerificationRequired === true;
+}
+
+export function requestRegistrationEmail(email: string) {
+  return withSessionLock(async () => {
+    const proof = await csrfProof(undefined, true);
+    await request("/auth/register/email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", [csrfHeader]: proof },
+      body: JSON.stringify({ email }),
+    });
+  });
+}
+
 export function authenticateCookieSession(path: string, payload: object) {
   return withSessionLock(async () => {
     const proof = await csrfProof(undefined, true);

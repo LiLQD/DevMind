@@ -1,5 +1,11 @@
 import express from "express";
-import { register, login } from "../controllers/auth.controller.ts";
+import { registrationEmailLimiter } from "../middleware/rateLimiter.ts";
+import {
+  register,
+  login,
+  registrationStatus,
+  requestRegistrationEmail,
+} from "../controllers/auth.controller.ts";
 import {
   bootstrapCsrf,
   discoverCookieSession,
@@ -20,6 +26,13 @@ import {
 const router = express.Router();
 
 router.get("/csrf", bootstrapCsrf);
+router.get("/register/status", registrationStatus);
+router.post(
+  "/register/email",
+  requireCredentialProof,
+  registrationEmailLimiter,
+  requestRegistrationEmail,
+);
 router.post("/register", requireCredentialProof, register);
 router.post("/login", requireCredentialProof, login);
 router.get("/session", protectCookie, discoverCookieSession);

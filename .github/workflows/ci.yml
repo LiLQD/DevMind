@@ -19,6 +19,15 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379/tcp
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: server
@@ -49,6 +58,7 @@ jobs:
       - name: Run backend API tests
         env:
           COLLECTION_OWNERSHIP_TEST_MONGODB_URI: mongodb://127.0.0.1:${{ job.services.mongodb.ports[27017] }}
+          REGISTRATION_TEST_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports[6379] }}
           AUTH_SESSION_TEST_MONGODB_URI: mongodb://127.0.0.1:${{ job.services.mongodb.ports[27017] }}
         run: pnpm test
 
