@@ -401,6 +401,7 @@ test("creates a collection through the anchored popover and preserves input on f
   try {
     await name.press("Enter");
     await expect(button(page, "Creating…")).toBeDisabled();
+    await expect.poll(() => attempts).toBe(1);
     await name.press("Enter");
     expect(attempts).toBe(1);
   } finally {
