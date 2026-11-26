@@ -3,19 +3,19 @@
    ============================================================ */
 :root {
   color-scheme: light;
-  --canvas: #f5f6f8;
+  --canvas: #ffffff;
   --surface: #ffffff;
-  --surface-subtle: #f0f2f5;
-  --border: #d9dee6;
-  --border-strong: #bbc4d0;
-  --text: #17202c;
-  --text-muted: #526071;
-  --accent-text: #2455b2;
-  --accent-surface: #eaf1ff;
-  --action-bg: #2455b2;
+  --surface-subtle: #f0f0f0;
+  --border: #e5e5e5;
+  --border-strong: #8b8b8b;
+  --text: #171717;
+  --text-muted: #595959;
+  --accent-text: #202020;
+  --accent-surface: #e8e8e8;
+  --action-bg: #202020;
   --action-fg: #ffffff;
-  --action-hover: #1e4694;
-  --focus-ring: #2455b2;
+  --action-hover: #353535;
+  --focus-ring: #202020;
   --syntax-keyword: #2455b2;
   --syntax-string: #246248;
   --syntax-literal: #8b451a;
@@ -58,19 +58,19 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --canvas: #111318;
-  --surface: #181c23;
-  --surface-subtle: #202630;
-  --border: #343d49;
-  --border-strong: #525e6d;
-  --text: #eef1f5;
-  --text-muted: #a9b4c3;
-  --accent-text: #91b9ff;
-  --accent-surface: #222f49;
-  --action-bg: #91b9ff;
-  --action-fg: #101a2a;
-  --action-hover: #b1cfff;
-  --focus-ring: #91b9ff;
+  --canvas: #171717;
+  --surface: #222222;
+  --surface-subtle: #292929;
+  --border: #333333;
+  --border-strong: #767676;
+  --text: #f5f5f5;
+  --text-muted: #a3a3a3;
+  --accent-text: #f5f5f5;
+  --accent-surface: #303030;
+  --action-bg: #f5f5f5;
+  --action-fg: #171717;
+  --action-hover: #dadada;
+  --focus-ring: #f5f5f5;
   --syntax-keyword: #a6c5ff;
   --syntax-string: #9bd6b3;
   --syntax-literal: #f2b98c;
@@ -144,7 +144,7 @@ kbd {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  background: #f5f6f8;
+  background: #ffffff;
   padding: 24px;
 }
 
@@ -954,7 +954,7 @@ button:disabled {
   border-bottom: 0;
 }
 .related-item:hover {
-  background: #fbfcfe;
+  background: #fafafa;
 }
 
 .related-main {
@@ -981,7 +981,7 @@ button:disabled {
 
 .score-track {
   height: 4px;
-  background: #e8edf4;
+  background: #e8e8e8;
   border-radius: 999px;
   overflow: hidden;
 }
@@ -1266,7 +1266,7 @@ button:disabled {
   border-color: #f0c4bd;
 }
 .notification.info {
-  border-color: #cbdaf4;
+  border-color: #d4d4d4;
 }
 
 .notification-marker {
@@ -1336,7 +1336,7 @@ button:disabled {
 }
 
 .skeleton-block {
-  background: linear-gradient(90deg, #eef1f5 25%, #f7f8fa 37%, #eef1f5 63%);
+  background: var(--surface-subtle);
   background-size: 400% 100%;
   animation: shimmer 1.3s ease infinite;
   border-radius: 6px;
@@ -1488,7 +1488,7 @@ button:disabled {
   background: var(--bg);
 }
 :root[data-theme="dark"] .auth-page {
-  background: #0f1318;
+  background: #141414;
 }
 :root[data-theme="dark"] .note-content,
 :root[data-theme="dark"] .related-section,
@@ -1499,11 +1499,11 @@ button:disabled {
 
 :root[data-theme="dark"] .related-item:hover,
 :root[data-theme="dark"] .search-bar-clear:hover {
-  background: #1b222c;
+  background: #292929;
 }
 
 :root[data-theme="dark"] .skeleton-block {
-  background: linear-gradient(90deg, #1d252f 25%, #27303b 37%, #1d252f 63%);
+  background: var(--surface-subtle);
   background-size: 400% 100%;
 }
 
@@ -1547,7 +1547,7 @@ button:disabled {
 :root[data-theme="dark"] .form-field input::placeholder,
 :root[data-theme="dark"] .form-field textarea::placeholder,
 :root[data-theme="dark"] .auth-form input::placeholder {
-  color: #7f8b9a;
+  color: #a3a3a3;
 }
 
 :root[data-theme="dark"] .related-item,
@@ -1559,7 +1559,7 @@ button:disabled {
 }
 
 :root[data-theme="dark"] .eyebrow {
-  color: #95a0ae;
+  color: #b0b0b0;
 }
 
 :root[data-theme="dark"] .secondary-btn,

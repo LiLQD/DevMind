@@ -6,8 +6,6 @@ type NoteItemProps = {
   exactSearchQuery: string;
   isActive: boolean;
   onView: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
 };
 
 // Helper to format date as "Aug 23"
@@ -40,8 +38,6 @@ export default function NoteItem({
   exactSearchQuery,
   isActive,
   onView,
-  onEdit,
-  onDelete,
 }: NoteItemProps) {
   const metadataId = useId();
   const pattern = exactSearchQuery
@@ -49,7 +45,7 @@ export default function NoteItem({
     : null;
   const titleMatch = pattern?.exec(note.title);
   const bodyMatch = pattern?.exec(note.content);
-  const collections = note.collections;
+  const date = note.updatedAt ?? note.createdAt;
 
   const preview = note.content
     .split("\n")
@@ -96,24 +92,7 @@ export default function NoteItem({
             <span className="note-row-excerpt">{preview.slice(0, 160)}</span>
           ))}
         <span className="note-item-bottom" id={metadataId}>
-          <time dateTime={note.createdAt}>{formatDate(note.createdAt)}</time>
-          {collections?.map((collection) => (
-            <span key={collection._id} className="note-row-label">
-              {collection.name}
-            </span>
-          ))}
-          {!collections?.length && note.collection && (
-            <span className="note-row-label">
-              {typeof note.collection === "object"
-                ? note.collection.name
-                : note.collection}
-            </span>
-          )}
-          {note.tags?.map((tag) => (
-            <span key={tag._id} className="note-row-label">
-              {tag.name}
-            </span>
-          ))}
+          <time dateTime={date}>{formatDate(date)}</time>
           {note.embeddingStatus === "failed" && (
             <span>Saved without embedding</span>
           )}
@@ -122,22 +101,15 @@ export default function NoteItem({
           )}
         </span>
       </button>
-      <div className="note-item-actions">
-        <button
-          type="button"
-          className="row-action edit-action"
-          onClick={onEdit}
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          className="row-action delete-action"
-          onClick={onDelete}
-        >
-          Delete
-        </button>
-      </div>
+      <button
+        type="button"
+        className="favorite-star"
+        disabled
+        title="Coming soon"
+        aria-label="Favorite, coming soon"
+      >
+        ☆
+      </button>
     </div>
   );
 }

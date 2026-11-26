@@ -1,11 +1,27 @@
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { FormEvent } from "react";
 import type { Collection, Note, SearchMode } from "./types";
 import "./App.css";
 
 // Components
 import AuthPage from "./components/AuthPage";
-import TopBar from "./components/TopBar";
+import WorkspaceShell, {
+  FocusControl,
+  mobileWorkspace,
+} from "./features/workspace/WorkspaceShell";
+import NavigationSidebar, {
+  uncategorized,
+} from "./features/workspace/NavigationSidebar";
+import AccountMenu from "./features/workspace/AccountMenu";
+import NoteDetails from "./features/workspace/NoteDetails";
+import { fitsNoteRequest, readMarkdownFile } from "./markdownFile";
+import "./features/workspace/workspace.css";
 import Sidebar from "./components/Sidebar";
 import NoteView from "./components/NoteView";
 import CreatePanel from "./components/CreatePanel";
@@ -113,6 +129,7 @@ function App() {
   const [bulkImportAccess, setBulkImportAccess] = useState<{
     sessionKey: string;
     allowed: boolean;
+    plan?: "free" | "pro";
   } | null>(null);
 
   // --- Data ---
@@ -126,6 +143,12 @@ function App() {
 
   // --- Collections & Tags ---
   const [collections, setCollections] = useState<Collection[]>([]);
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const importingFile = useRef(false);
+  const openImportedDraft =
+    useRef<(draft: { title: string; content: string }) => void>(null);
+  const browseRequest = useRef(0);
+  const [completeNotes, setCompleteNotes] = useState<Note[] | null>(null);
   const [selectedCollectionFilter, setSelectedCollectionFilter] = useState<
     string | null
   >(null);
@@ -336,6 +359,9 @@ function App() {
     setIsExportingNotes(false);
     setSession({ cookie: null, requests: new AbortController() });
     setUser(null);
+    setCompleteNotes(null);
+    importingFile.current = false;
+    browseRequest.current += 1;
     if (notificationTimerRef.current)
       clearTimeout(notificationTimerRef.current);
     setNotification(null);
@@ -487,22 +513,37 @@ function App() {
   // --- Data fetching ---
   const fetchNotes = async () => {
     if (!sessionKey || sessionSignal.aborted) return;
+    const version = ++browseRequest.current;
     setIsLoadingNotes(true);
     try {
       let url = "/notes";
       const params = new URLSearchParams();
       if (selectedTagFilter) params.append("tagId", selectedTagFilter);
-      if (selectedCollectionFilter)
+      if (
+        selectedCollectionFilter &&
+        selectedCollectionFilter !== uncategorized
+      )
         params.append("collectionId", selectedCollectionFilter);
       if (params.toString()) url += "?" + params.toString();
       const data = await apiRequest<Note[] | { notes?: Note[]; data?: Note[] }>(
         url,
       );
-      setNotes(Array.isArray(data) ? data : data.notes || data.data || []);
+      if (version !== browseRequest.current) return;
+      const items = Array.isArray(data) ? data : data.notes || data.data || [];
+      if (!params.size) setCompleteNotes(items);
+      setNotes(
+        selectedCollectionFilter === uncategorized
+          ? items.filter(
+              (note) => !note.collections?.length && !note.collection,
+            )
+          : items,
+      );
     } catch {
-      showNotification("Failed to load notes.", "error");
+      if (!sessionSignal.aborted && version === browseRequest.current)
+        showNotification("Failed to load notes.", "error");
     } finally {
-      if (!sessionSignal.aborted) setIsLoadingNotes(false);
+      if (!sessionSignal.aborted && version === browseRequest.current)
+        setIsLoadingNotes(false);
     }
   };
 
@@ -731,7 +772,7 @@ function App() {
   };
 
   const showBrowse = (focusSearch = false) => {
-    const isMobile = window.matchMedia("(max-width: 800px)").matches;
+    const isMobile = window.matchMedia(mobileWorkspace).matches;
     if (isMobile || !focusSearch) setShowMobileDetail(false);
     window.requestAnimationFrame(() => {
       const list = noteListRef.current;
@@ -785,7 +826,10 @@ function App() {
     }
   };
 
-  const beginEditor = (note?: Note) => {
+  const beginEditor = (
+    note?: Note,
+    imported?: { title: string; content: string },
+  ) => {
     const opener = document.activeElement as HTMLElement | null;
     const inBrowse = Boolean(opener?.closest(".sidebar"));
     leaveEditor(() => {
@@ -795,12 +839,38 @@ function App() {
       const initial = draftFields(note);
       setEditor({ note: note ?? null, initial, version });
       editorOpenerRef.current = { element: opener, inBrowse };
-      setTitle(initial.title);
-      setContent(initial.content);
+      setTitle(imported?.title ?? initial.title);
+      setContent(imported?.content ?? initial.content);
       setTagInput(initial.tags);
       setSelectedCollectionId(initial.collectionId);
       openWorkspace(true);
     });
+  };
+
+  useLayoutEffect(() => {
+    openImportedDraft.current = (draft) => beginEditor(undefined, draft);
+  });
+
+  const importWorkspaceDraft = async (file: File) => {
+    if (importingFile.current) return;
+    importingFile.current = true;
+    try {
+      const draft = await readMarkdownFile(file);
+      if (sessionSignal.aborted) return;
+      if (
+        !fitsNoteRequest(
+          JSON.stringify({ ...draft, content: draft.content.trim(), tags: [] }),
+        )
+      ) {
+        throw new Error("This file exceeds the 1 MiB note request limit.");
+      }
+      openImportedDraft.current?.(draft);
+    } catch (error) {
+      if (!sessionSignal.aborted)
+        showNotification(errorMessage(error), "error");
+    } finally {
+      if (!sessionSignal.aborted) importingFile.current = false;
+    }
   };
 
   const cancelEditor = () => {
@@ -850,23 +920,14 @@ function App() {
         !sessionKey ||
         deleteTarget ||
         discardAction ||
-        document.querySelector(".plan-dialog[open]")
+        e.defaultPrevented ||
+        document.querySelector(".plan-dialog[open], [data-workspace-overlay]")
       )
         return;
       const mod = e.ctrlKey || e.metaKey;
       const isTyping = ["input", "textarea"].includes(
         document.activeElement?.tagName?.toLowerCase() ?? "",
       );
-      if (mod && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        showBrowse(true);
-        return;
-      }
-      if (mod && e.key.toLowerCase() === "n") {
-        e.preventDefault();
-        beginEditor();
-        return;
-      }
       if (
         mod &&
         e.key === "Enter" &&
@@ -889,7 +950,7 @@ function App() {
       if (e.key === "Escape") {
         if (
           editor &&
-          (showMobileDetail || !window.matchMedia("(max-width: 800px)").matches)
+          (showMobileDetail || !window.matchMedia(mobileWorkspace).matches)
         )
           cancelEditor();
         else if (isSearching) clearSearch();
@@ -912,10 +973,10 @@ function App() {
   useEffect(() => {
     if (!sessionKey) return;
     const request = new AbortController();
-    void apiRequest<{ entitlements?: { bulkMarkdownImport?: boolean } }>(
-      "/subscription",
-      { signal: request.signal },
-    ).then(
+    void apiRequest<{
+      plan?: "free" | "pro";
+      entitlements?: { bulkMarkdownImport?: boolean };
+    }>("/subscription", { signal: request.signal }).then(
       (subscription) => {
         if (request.signal.aborted || sessionSignal.aborted) return;
         setBulkImportAccess((current) =>
@@ -923,6 +984,7 @@ function App() {
             ? current
             : {
                 sessionKey,
+                plan: subscription?.plan,
                 allowed:
                   subscription?.entitlements?.bulkMarkdownImport === true,
               },
@@ -999,6 +1061,55 @@ function App() {
 
   // --- Main app ---
   const displayNotes = isSearching ? searchResults : notes;
+  const plan =
+    bulkImportAccess?.sessionKey === sessionKey
+      ? bulkImportAccess.plan
+      : undefined;
+  const counts =
+    !isLoadingNotes &&
+    !selectedCollectionFilter &&
+    !selectedTagFilter &&
+    completeNotes
+      ? new Map<string, number>()
+      : null;
+  if (counts && completeNotes) {
+    for (const note of completeNotes) {
+      const ids = note.collections?.map(({ _id }) => _id) ?? [];
+      if (!ids.length && !note.collection) ids.push(uncategorized);
+      for (const id of new Set(ids)) counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+  }
+  const account = (
+    <AccountMenu
+      name={user?.name || user?.email || "Account"}
+      email={user?.email}
+      plan={plan}
+      theme={theme}
+      onTheme={() =>
+        setTheme((value) => (value === "light" ? "dark" : "light"))
+      }
+      onExport={exportNotes}
+      exporting={isExportingNotes}
+      onLogout={() => leaveEditor(handleLogout)}
+      planControl={
+        <PlanPanel
+          apiRequest={apiRequest}
+          checkoutEnabled={mockCheckoutEnabled}
+          triggerLabel={
+            plan === "pro"
+              ? "Manage plan"
+              : plan === "free"
+                ? "Upgrade plan"
+                : "Plan & usage"
+          }
+          onBulkImportAccessChange={(allowed, nextPlan) => {
+            if (!sessionSignal.aborted)
+              setBulkImportAccess({ sessionKey, allowed, plan: nextPlan });
+          }}
+        />
+      }
+    />
+  );
 
   return (
     <div className={`app-shell ${theme === "dark" ? "theme-dark" : ""}`}>
@@ -1006,134 +1117,140 @@ function App() {
         notification={notification}
         onDismiss={() => setNotification(null)}
       />
-
-      <TopBar
-        accountControl={
-          <>
-            <PlanPanel
-              key={sessionKey}
-              apiRequest={apiRequest}
-              checkoutEnabled={mockCheckoutEnabled}
-              onBulkImportAccessChange={(allowed) => {
-                if (!sessionSignal.aborted)
-                  setBulkImportAccess({ sessionKey, allowed });
-              }}
+      <input
+        ref={importFileRef}
+        type="file"
+        accept=".md"
+        hidden
+        aria-label="Import Markdown file"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) void importWorkspaceDraft(file);
+        }}
+      />
+      <WorkspaceShell
+        key={sessionKey}
+        showDetail={showMobileDetail}
+        showBrowse={showBrowse}
+        canFocus={Boolean(editor || selectedNote)}
+        details={
+          !editor &&
+          selectedNote && (
+            <NoteDetails
+              note={selectedNote}
+              related={relatedNotes}
+              loading={isLoadingRelated}
+              onView={selectNote}
             />
-            {bulkImportAccess?.sessionKey === sessionKey &&
-              bulkImportAccess.allowed && (
+          )
+        }
+        navigation={
+          <NavigationSidebar
+            collections={collections}
+            counts={counts}
+            active={isSearching ? null : selectedCollectionFilter}
+            onFilter={(id) => {
+              setIsSearching(false);
+              setSelectedCollectionFilter(id);
+              showBrowse();
+            }}
+            onCreate={createCollection}
+            account={account}
+            onImport={() => importFileRef.current?.click()}
+            bulkImport={
+              bulkImportAccess?.sessionKey === sessionKey &&
+              bulkImportAccess.allowed ? (
                 <BulkImportPanel
-                  key={sessionKey + "-import"}
                   apiRequest={apiRequest}
                   onSaved={() => void fetchNotes()}
                 />
-              )}
-          </>
+              ) : null
+            }
+          />
         }
-        onExportNotes={exportNotes}
-        isExportingNotes={isExportingNotes}
-        notesCount={notes.length}
-        userLabel={user?.name || user?.email || "Account"}
-        theme={theme}
-        onToggleTheme={() =>
-          setTheme((t) => (t === "light" ? "dark" : "light"))
+        browse={
+          <Sidebar
+            notes={displayNotes}
+            exactSearchQuery={isSearching ? exactSearchQuery : ""}
+            selectedNoteId={editor?.note?._id ?? selectedNote?._id}
+            isLoading={isLoadingNotes && displayNotes.length === 0}
+            isSearching={isSearching}
+            searchMode={searchMode}
+            noteListRef={noteListRef}
+            newNoteButtonRef={newNoteButtonRef}
+            onNewNote={() => beginEditor()}
+            onResumeDraft={
+              editor && !showMobileDetail
+                ? () => openWorkspace(true)
+                : undefined
+            }
+            onViewNote={selectNote}
+            search={
+              <SearchBar
+                mode={searchMode}
+                setMode={(mode) => {
+                  setSearchMode(mode);
+                  setSearchResults([]);
+                  setIsSearching(false);
+                }}
+                query={query}
+                setQuery={setQuery}
+                onSearch={handleSearch}
+                onClearSearch={clearSearch}
+                isSearchingAI={isSearchingAI}
+                searchInputRef={searchInputRef}
+              />
+            }
+          />
         }
-        onLogout={() => leaveEditor(handleLogout)}
-      />
-
-      <main
-        className={`workspace ${showMobileDetail ? "workspace-show-detail" : ""}`}
-        aria-label="Notes workspace"
       >
-        <Sidebar
-          notes={displayNotes}
-          exactSearchQuery={isSearching ? exactSearchQuery : ""}
-          selectedNoteId={editor?.note?._id ?? selectedNote?._id}
-          isLoading={isLoadingNotes && displayNotes.length === 0}
-          isSearching={isSearching}
-          searchMode={searchMode}
-          noteListRef={noteListRef}
-          newNoteButtonRef={newNoteButtonRef}
-          onNewNote={() => beginEditor()}
-          onResumeDraft={
-            editor && !showMobileDetail ? () => openWorkspace(true) : undefined
-          }
-          onViewNote={selectNote}
-          onEditNote={beginEditor}
-          onDeleteNote={requestDelete}
-          collections={collections}
-          selectedCollectionFilter={selectedCollectionFilter}
-          setSelectedCollectionFilter={setSelectedCollectionFilter}
-          search={
-            <SearchBar
-              mode={searchMode}
-              setMode={(mode) => {
-                setSearchMode(mode);
-                setSearchResults([]);
-                setIsSearching(false);
-              }}
-              query={query}
-              setQuery={setQuery}
-              onSearch={handleSearch}
-              onClearSearch={clearSearch}
-              isSearchingAI={isSearchingAI}
-              searchInputRef={searchInputRef}
-            />
-          }
-        />
-
         <section
           className="main-pane"
           ref={detailRef}
           tabIndex={-1}
           aria-label="Note detail"
         >
-          {!editor && (
-            <button
-              type="button"
-              className="secondary-btn workspace-back"
-              onClick={() => showBrowse()}
-            >
-              Back to notes
-            </button>
-          )}
           {editor ? (
-            <CreatePanel
-              key={`${sessionKey}:${editor.version}`}
-              isEditing={isEditingNote}
-              title={title}
-              setTitle={setTitle}
-              content={content}
-              setContent={setContent}
-              tagInput={tagInput}
-              setTagInput={setTagInput}
-              onSubmit={isEditingNote ? updateNote : createNote}
-              onCancel={cancelEditor}
-              isSaving={isSavingNote}
-              submitLabel={isEditingNote ? "Save changes" : "Save note"}
-              collections={collections}
-              selectedCollectionId={selectedCollectionId}
-              setSelectedCollectionId={setSelectedCollectionId}
-              newCollectionName={newCollectionName}
-              setNewCollectionName={setNewCollectionName}
-              onSuggest={(draft, signal) =>
-                apiRequest("/notes/suggestions", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    title: draft.title.trim().slice(0, 200),
-                    content: draft.content.trim().slice(0, 2400),
-                  }),
-                  signal: AbortSignal.any([sessionSignal, signal]),
-                })
-              }
-              onCreateCollection={createCollection}
-            />
+            <>
+              <div className="editor-layout-actions">
+                <FocusControl />
+              </div>
+              <CreatePanel
+                key={`${sessionKey}:${editor.version}`}
+                isEditing={isEditingNote}
+                title={title}
+                setTitle={setTitle}
+                content={content}
+                setContent={setContent}
+                tagInput={tagInput}
+                setTagInput={setTagInput}
+                onSubmit={isEditingNote ? updateNote : createNote}
+                onCancel={cancelEditor}
+                isSaving={isSavingNote}
+                submitLabel={isEditingNote ? "Save changes" : "Save note"}
+                collections={collections}
+                selectedCollectionId={selectedCollectionId}
+                setSelectedCollectionId={setSelectedCollectionId}
+                newCollectionName={newCollectionName}
+                setNewCollectionName={setNewCollectionName}
+                onSuggest={(draft, signal) =>
+                  apiRequest("/notes/suggestions", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      title: draft.title.trim().slice(0, 200),
+                      content: draft.content.trim().slice(0, 2400),
+                    }),
+                    signal: AbortSignal.any([sessionSignal, signal]),
+                  })
+                }
+                onCreateCollection={createCollection}
+              />
+            </>
           ) : (
             <NoteView
               selectedNote={selectedNote}
-              relatedNotes={relatedNotes}
               isLoadingNote={isLoadingNote}
-              isLoadingRelated={isLoadingRelated}
-              onViewNote={selectNote}
               onCreateNote={() => beginEditor()}
               hasNotes={notes.length > 0 || Boolean(selectedCollectionFilter)}
               onEditNote={beginEditor}
@@ -1142,7 +1259,7 @@ function App() {
             />
           )}
         </section>
-      </main>
+      </WorkspaceShell>
 
       {discardAction && (
         <ConfirmModal

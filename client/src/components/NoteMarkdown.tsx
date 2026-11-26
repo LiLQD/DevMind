@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import Markdown from "react-markdown";
 import type { Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 import bash from "refractor/bash";
 import { refractor } from "refractor/core";
 import javascript from "refractor/javascript";
@@ -14,7 +15,13 @@ for (const syntax of [bash, javascript, json, typescript, yaml]) {
   refractor.register(syntax);
 }
 
-function CopyCodeButton({ text }: { text: string }) {
+function CopyCodeButton({
+  text,
+  language,
+}: {
+  text: string;
+  language: string;
+}) {
   const [feedback, setFeedback] = useState("");
   const [isCopying, setIsCopying] = useState(false);
 
@@ -34,6 +41,7 @@ function CopyCodeButton({ text }: { text: string }) {
 
   return (
     <div className="code-block-toolbar">
+      <span className="markdown-code-language">{language || "Plain text"}</span>
       <span role="status">{feedback}</span>
       <button
         type="button"
@@ -48,17 +56,39 @@ function CopyCodeButton({ text }: { text: string }) {
 }
 
 const components: Components = {
+  table({ node: _node, children, ...props }) {
+    return (
+      <div
+        className="markdown-table-scroll"
+        tabIndex={0}
+        role="region"
+        aria-label="Scrollable Markdown table"
+      >
+        <table {...props}>{children}</table>
+      </div>
+    );
+  },
   pre({ node, children, ...props }) {
     const code = node?.children[0];
     const source =
       code?.type === "element" && code.tagName === "code"
         ? code.children[0]
         : undefined;
-    if (source?.type !== "text") return <pre {...props}>{children}</pre>;
+    if (source?.type !== "text" || code?.type !== "element")
+      return <pre {...props}>{children}</pre>;
+    const language = Array.isArray(code.properties.className)
+      ? code.properties.className.find(
+          (value) => typeof value === "string" && value.startsWith("language-"),
+        )
+      : undefined;
 
     return (
       <div className="markdown-code-block">
-        <CopyCodeButton key={source.value} text={source.value} />
+        <CopyCodeButton
+          key={source.value}
+          text={source.value}
+          language={typeof language === "string" ? language.slice(9) : ""}
+        />
         <pre {...props}>{children}</pre>
       </div>
     );
@@ -96,5 +126,11 @@ const components: Components = {
 };
 
 export default function NoteMarkdown({ content }: { content: string }) {
-  return <Markdown components={components}>{content}</Markdown>;
+  return (
+    <div className="markdown-body">
+      <Markdown components={components} remarkPlugins={[remarkGfm]} skipHtml>
+        {content}
+      </Markdown>
+    </div>
+  );
 }

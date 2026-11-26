@@ -63,10 +63,15 @@ export default function PlanPanel({
   apiRequest,
   checkoutEnabled,
   onBulkImportAccessChange,
+  triggerLabel = "Plan & usage",
 }: {
   apiRequest: <T>(endpoint: string, options?: RequestInit) => Promise<T>;
   checkoutEnabled: boolean;
-  onBulkImportAccessChange: (allowed: boolean) => void;
+  triggerLabel?: string;
+  onBulkImportAccessChange: (
+    allowed: boolean,
+    plan: Subscription["plan"],
+  ) => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -93,7 +98,10 @@ export default function PlanPanel({
         throw new Error("Unexpected subscription response.");
       }
       setSubscription(next);
-      onBulkImportAccessChange(next.entitlements?.bulkMarkdownImport === true);
+      onBulkImportAccessChange(
+        next.entitlements?.bulkMarkdownImport === true,
+        next.plan,
+      );
     } catch {
       setSubscription(null);
       setSubscriptionError(true);
@@ -154,7 +162,7 @@ export default function PlanPanel({
   return (
     <>
       <button type="button" className="topbar-button" onClick={open}>
-        Plan &amp; usage
+        {triggerLabel}
       </button>
       <dialog
         ref={dialogRef}
