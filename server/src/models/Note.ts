@@ -12,6 +12,7 @@ const noteSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    favoritedAt: Date,
     importKey: { type: String, select: false },
     importFingerprint: { type: String, select: false },
     embedding: {
@@ -48,6 +49,11 @@ noteSchema.index({ userId: 1, embeddingStatus: 1 });
 noteSchema.index(
   { userId: 1, importKey: 1 },
   { unique: true, partialFilterExpression: { importKey: { $type: "string" } } },
+);
+
+noteSchema.index(
+  { userId: 1, favoritedAt: -1, _id: -1 },
+  { partialFilterExpression: { favoritedAt: { $type: "date" } } },
 );
 
 const Note = mongoose.model("Note", noteSchema);

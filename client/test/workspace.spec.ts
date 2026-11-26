@@ -67,10 +67,12 @@ const seed = [
   createdAt: "2026-01-10T09:00:00Z",
   updatedAt: "2026-01-20T10:24:00Z",
   embeddingStatus: "success",
+  favoritedAt: null as string | null,
 }));
 
 async function mockWorkspace(page: Page, plan: "free" | "pro" = "free") {
   let notes = structuredClone(seed);
+  let favoriteSequence = 0;
   const requests: string[] = [];
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
@@ -127,6 +129,8 @@ async function mockWorkspace(page: Page, plan: "free" | "pro" = "free") {
         notes = [...notes, note];
         return reply(note, 201);
       }
+      if (url.searchParams.get("favorite") === "true")
+        return reply(notes.filter((note) => note.favoritedAt));
       const collectionId = url.searchParams.get("collectionId");
       return reply(
         collectionId
@@ -137,6 +141,16 @@ async function mockWorkspace(page: Page, plan: "free" | "pro" = "free") {
       );
     }
     if (path.startsWith("/api/notes/")) {
+      if (path.endsWith("/favorite") && method === "PUT") {
+        const note = notes.find((item) => item._id === path.split("/").at(-2));
+        if (!note) return reply({}, 404);
+        const { favorite } = route.request().postDataJSON();
+        note.favoritedAt = favorite
+          ? (note.favoritedAt ??
+            new Date(1769000000000 + ++favoriteSequence).toISOString())
+          : null;
+        return reply({ favoritedAt: note.favoritedAt });
+      }
       const id = path.split("/").at(-1);
       const note = notes.find(({ _id }) => _id === id);
       if (method === "DELETE") {
@@ -210,10 +224,10 @@ test("handles account keyboard navigation, placeholders, search, collection filt
   const requests = await mockWorkspace(page);
   await openNote(page);
   await expect(button(page, "Share, coming soon")).toBeDisabled();
-  await expect(button(page, "Favorites, coming soon")).toBeDisabled();
+  await expect(button(page, "Favorites")).toBeEnabled();
   await expect(
-    page.getByRole("button", { name: "Favorite, coming soon" }).first(),
-  ).toBeDisabled();
+    page.getByRole("button", { name: `Add to favorites: ${seed[0].title}` }),
+  ).toHaveCount(2);
   const trigger = button(page, "Account menu");
   await trigger.focus();
   await page.keyboard.press("ArrowDown");
@@ -487,4 +501,194 @@ if (captureDir) {
       });
     }
   }
+}
+
+test("stars stay synchronized and ordered, survive reload, and leave an unstarred reader open", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockWorkspace(page);
+  const recent = page.getByRole("region", { name: "Recent favorites" });
+  await button(page, "Favorites").click();
+  await expect(page.getByText("No favorites yet.")).toBeVisible();
+  await expect(page.getByText("Search covers all your notes.")).toBeVisible();
+  await button(page, "Browse notes").click();
+  await openNote(page);
+  const reader = page.getByRole("region", { name: "Note detail" });
+  const star = (title: string, active = false) =>
+    button(page, `${active ? "Remove from" : "Add to"} favorites: ${title}`);
+  await reader
+    .getByRole("button", { name: `Add to favorites: ${seed[0].title}` })
+    .click();
+  await expect(star(seed[0].title, true)).toHaveCount(3);
+  await star(seed[1].title).click();
+  await expect(
+    recent.getByRole("button", { name: /^Open favorite:/ }),
+  ).toHaveText([/Building a RESTful/, /System Design/]);
+  await button(page, "Collapse recent favorites").click();
+  await expect(
+    recent.getByRole("button", { name: /^Open favorite:/ }).first(),
+  ).toBeHidden();
+  await button(page, "View all").click();
+  await expect(page.getByText("2 favorites", { exact: true })).toBeVisible();
+  await reader
+    .getByRole("button", { name: `Remove from favorites: ${seed[0].title}` })
+    .click();
+  await expect(button(page, seed[0].title)).toBeHidden();
+  await expect(
+    reader.getByRole("heading", { name: seed[0].title }),
+  ).toBeVisible();
+  await page.reload();
+  await button(page, "Favorites").click();
+  await expect(button(page, seed[1].title)).toBeVisible();
+  await button(page, seed[1].title).click();
+  await button(page, "More note actions").click();
+  await button(page, "Delete note").click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Delete note" })
+    .click();
+  await expect(page.getByText("No favorites yet.")).toBeVisible();
+});
+
+test("deduplicates a pending star and reconciles a lost response without discarding a draft", async ({
+  page,
+}) => {
+  const requests = await mockWorkspace(page);
+  await openNote(page);
+  const release = Promise.withResolvers<void>();
+  const mutations = { count: 0 };
+  let detailFavorite: string | null = null;
+  await page.route("**/api/notes/main", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    return route.fulfill({ json: { ...seed[0], favoritedAt: detailFavorite } });
+  });
+  await page.route("**/api/notes/main/favorite", async (route) => {
+    mutations.count++;
+    if (mutations.count === 1) {
+      await release.promise;
+      detailFavorite = "2026-01-20T10:24:00Z";
+    }
+    await route.abort();
+  });
+  const browse = page.getByRole("complementary", { name: "Browse notes" });
+  const rowStar = browse.getByRole("button", {
+    name: `Add to favorites: ${seed[0].title}`,
+  });
+  await button(page, "Edit").click();
+  await page.locator("#note-content").fill("This draft must be kept.");
+  try {
+    await rowStar.click();
+    await expect(rowStar).toHaveAttribute("aria-busy", "true");
+    await expect.poll(() => mutations.count).toBe(1);
+    await rowStar.evaluate((element: HTMLElement) => element.click());
+    expect(mutations.count).toBe(1);
+    await expect(button(page, "Save changes")).toBeEnabled();
+  } finally {
+    release.resolve();
+  }
+  const confirmed = browse
+    .getByRole("button", { name: `Remove from favorites: ${seed[0].title}` })
+    .first();
+  await expect(confirmed).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#note-content")).toHaveValue(
+    "This draft must be kept.",
+  );
+  await confirmed.click();
+  await expect(
+    page.getByText("Could not confirm the favorite change.", { exact: false }),
+  ).toBeVisible();
+  await expect(confirmed).toHaveAttribute("aria-pressed", "true");
+  expect(requests).not.toContain("PUT /api/notes/main");
+});
+
+test("ignores an old account's star response after switching sessions", async ({
+  page,
+}) => {
+  await mockWorkspace(page);
+  const release = Promise.withResolvers<void>();
+  const started = Promise.withResolvers<void>();
+  let account: "workspace" | "other" | null = "workspace";
+  await page.route("**/api/auth/*", (route) => {
+    switch (new URL(route.request().url()).pathname) {
+      case "/api/auth/session":
+        return account
+          ? route.fulfill({
+              json: {
+                sessionId: account,
+                user: { id: account, name: account },
+              },
+            })
+          : route.fulfill({ status: 401, json: { code: "AUTH_REQUIRED" } });
+      case "/api/auth/logout":
+        account = null;
+        return route.fulfill({ status: 204 });
+      case "/api/auth/login":
+        account = "other";
+        return route.fulfill({ json: {} });
+      case "/api/auth/csrf":
+        return route.fulfill({
+          json: {
+            csrfToken: new URL(route.request().url()).search
+              ? "credential"
+              : `${account}.9999999999.proof`,
+          },
+        });
+      default:
+        return route.fallback();
+    }
+  });
+  await page.route("**/api/notes?*", (route) =>
+    account === "other" ? route.fulfill({ json: [] }) : route.fallback(),
+  );
+  await page.route("**/api/notes/main/favorite", async (route) => {
+    started.resolve();
+    await release.promise;
+    await route.fulfill({ json: { favoritedAt: "2026-01-20T10:24:00Z" } });
+  });
+  try {
+    await button(page, `Add to favorites: ${seed[0].title}`).click();
+    await started.promise;
+    const finished = page.waitForEvent("requestfinished", (req) =>
+      req.url().endsWith("/main/favorite"),
+    );
+    await button(page, "Account menu").click();
+    await button(page, "Log out").click();
+    await page.getByLabel("Email").fill("other@example.test");
+    await page.getByLabel("Password").fill("example-password");
+    await button(page, "Sign in").click();
+    await button(page, "Favorites").click();
+    await expect(page.getByText("No favorites yet.")).toBeVisible();
+    release.resolve();
+    await finished;
+    await expect(page.getByText("No favorites yet.")).toBeVisible();
+    await expect(button(page, seed[0].title)).toHaveCount(0);
+  } finally {
+    release.resolve();
+  }
+});
+
+for (const theme of ["light", "dark"]) {
+  test(`favorites work in the mobile drawer in ${theme} mode`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript(
+      (value) => localStorage.setItem("devmind-theme", value),
+      theme,
+    );
+    await mockWorkspace(page);
+    await openNote(page);
+    await button(page, `Add to favorites: ${seed[0].title}`).click();
+    await expect(
+      button(page, `Remove from favorites: ${seed[0].title}`),
+    ).toHaveAttribute("aria-pressed", "true");
+    await button(page, "Show navigation").click();
+    await button(page, "Favorites").click();
+    await expect(button(page, seed[0].title)).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(390);
+  });
 }

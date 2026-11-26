@@ -1,3 +1,4 @@
+import type { FavoriteControls } from "../features/favorites/FavoriteButton";
 import type { Note } from "../types";
 
 export type NoteListProps = {
@@ -9,6 +10,9 @@ export type NoteListProps = {
   onViewNote: (id: string) => void;
   emptyMessage: string;
   emptyHint: string;
+  favorites: FavoriteControls;
+  leading?: ReactNode;
+  emptyContent?: ReactNode;
 };
 
 import NoteItem from "./NoteItem";
@@ -22,6 +26,9 @@ export default function NoteList({
   onViewNote,
   emptyMessage,
   emptyHint,
+  favorites,
+  leading,
+  emptyContent,
 }: NoteListProps) {
   if (isLoading) {
     return (
@@ -39,16 +46,20 @@ export default function NoteList({
   if (notes.length === 0) {
     return (
       <div className="notes-list" ref={noteListRef}>
-        <div className="empty-notes">
-          <p>{emptyMessage}</p>
-          <span>{emptyHint}</span>
-        </div>
+        {leading}
+        {emptyContent ?? (
+          <div className="empty-notes">
+            <p>{emptyMessage}</p>
+            <span>{emptyHint}</span>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <div className="notes-list" ref={noteListRef}>
+      {leading}
       {notes.map((note) => (
         <NoteItem
           key={note._id}
@@ -56,9 +67,10 @@ export default function NoteList({
           exactSearchQuery={exactSearchQuery}
           isActive={note._id === selectedNoteId}
           onView={() => onViewNote(note._id)}
+          favorites={favorites}
         />
       ))}
     </div>
   );
 }
-import type { Ref } from "react";
+import type { ReactNode, Ref } from "react";

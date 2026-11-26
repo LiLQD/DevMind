@@ -6,6 +6,7 @@ import { PanelControl } from "./WorkspaceShell";
 import WorkspaceIcon from "./WorkspaceIcon";
 import type { WorkspaceIconName } from "./WorkspaceIcon";
 
+export const favoritesFilter = "__favorites__";
 export const uncategorized = "__uncategorized__";
 
 export default function NavigationSidebar({
@@ -41,7 +42,7 @@ export default function NavigationSidebar({
           <WorkspaceIcon name={icon} />
         </span>
         <span className="nav-label">{label}</span>
-        {counts && id !== null && (
+        {counts && id !== null && id !== favoritesFilter && (
           <span className="nav-count">{counts.get(id) ?? 0}</span>
         )}
       </button>
@@ -55,18 +56,7 @@ export default function NavigationSidebar({
       </div>
       <nav aria-label="Notes and collections" className="navigation-scroll">
         {filter(null, "Notes", "note")}
-        <button
-          type="button"
-          className="nav-item"
-          disabled
-          title="Coming soon"
-          aria-label="Favorites, coming soon"
-        >
-          <span className="nav-icon" aria-hidden="true">
-            <WorkspaceIcon name="star" />
-          </span>
-          <span className="nav-label">Favorites</span>
-        </button>
+        {filter(favoritesFilter, "Favorites", "star")}
         {bulkImport ? (
           <Disclosure
             className="import-disclosure"

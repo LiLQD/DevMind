@@ -114,6 +114,8 @@ for (const outcome of ["abort", "late success", "late error"]) {
         return;
       }
       if (pathname === "/api/notes") {
+        if (url.searchParams.get("favorite") === "true")
+          return route.fulfill({ json: [] });
         if (isAccountA && url.searchParams.has("collectionId")) {
           await holdAccountA(pathname, request);
           if (!ignoresAbort) return;
@@ -158,7 +160,7 @@ for (const outcome of ["abort", "late success", "late error"]) {
       const exact = page.getByRole("radio", { name: "Exact" });
       const query = page.getByRole("textbox", { name: "Search notes" });
       await expect(
-        page.getByRole("button", { name: accountA.note.title }),
+        page.getByRole("button", { name: accountA.note.title, exact: true }),
       ).toBeVisible();
       await expect(filter).toBeVisible();
       holdCollectionsA = true;
@@ -185,7 +187,7 @@ for (const outcome of ["abort", "late success", "late error"]) {
       await page.getByRole("button", { name: "Sign in", exact: true }).click();
 
       await expect(
-        page.getByRole("button", { name: accountB.note.title }),
+        page.getByRole("button", { name: accountB.note.title, exact: true }),
       ).toBeVisible();
       expect(notesFiltersB).toEqual([null]);
       await expect(
@@ -212,7 +214,7 @@ for (const outcome of ["abort", "late success", "late error"]) {
 
       await expect(searching).toBeDisabled();
       await expect(
-        page.getByRole("button", { name: accountB.note.title }),
+        page.getByRole("button", { name: accountB.note.title, exact: true }),
       ).toBeVisible();
       await expect(
         page.getByRole("button", { name: accountA.note.title }),
