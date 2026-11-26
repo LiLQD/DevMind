@@ -35,9 +35,12 @@ import BulkImportPanel from "./features/bulk-import/BulkImportPanel";
 import SearchBar from "./components/SearchBar";
 import {
   authenticateCookieSession,
-  followGoogleAuthorization,
-  googleSignInAvailable,
-  startGoogleSignIn,
+  followOAuthAuthorization,
+  oauthSignInAvailable,
+  startOAuthSignIn,
+  oauthProviders,
+  oauthProviderNames,
+  type OAuthProvider,
   CookieAuthError,
   cookieSessionChannel,
   cookieWorkspaceRequest,
@@ -115,12 +118,21 @@ function authResponseError(status: number, message: string, isLogin: boolean) {
     : "Unable to create your account. Please try again.";
 }
 
-const googleReturnErrors: Record<string, string> = {
-  cancelled: "Google sign-in was cancelled. You can try again.",
-  invalid: "Google could not verify this sign-in. Start again.",
-  unavailable:
-    "Google sign-in is temporarily unavailable. Try again or use your password.",
-};
+type OAuthReturn = { provider: OAuthProvider; result: string };
+
+function oauthReturnError({ provider, result }: OAuthReturn) {
+  const name = oauthProviderNames[provider];
+  switch (result) {
+    case "cancelled":
+      return `${name} sign-in was cancelled. You can try again.`;
+    case "invalid":
+      return `${name} could not verify this sign-in. Start again.`;
+    case "unavailable":
+      return `${name} sign-in is temporarily unavailable. Try again or use your password.`;
+    default:
+      return "";
+  }
+}
 
 function App() {
   // --- Auth ---
@@ -137,14 +149,26 @@ function App() {
   const cookieChannelRef = useRef<BroadcastChannel | null>(null);
   const logoutTargetRef = useRef<CookieSession | null>(null);
   const draftOwnerRef = useRef<string | null>(null);
-  const [googleEnabled, setGoogleEnabled] = useState(false);
-  const [googlePending, setGooglePending] = useState(false);
-  const [googleReturn, setGoogleReturn] = useState(() =>
-    new URL(window.location.href).searchParams.get("google"),
-  );
-  const [googleFeedback, setGoogleFeedback] = useState("");
+  const [oauthEnabled, setOAuthEnabled] = useState({
+    google: false,
+    github: false,
+  });
+  const [oauthPending, setOAuthPending] = useState<OAuthProvider | null>(null);
+  const [oauthReturn, setOAuthReturn] = useState<OAuthReturn | null>(() => {
+    const params = new URL(window.location.href).searchParams;
+    for (const provider of oauthProviders) {
+      const result = params.get(provider);
+      if (result !== null) return { provider, result };
+    }
+    return null;
+  });
+  const [oauthFeedback, setOAuthFeedback] = useState("");
   const [showSignInMethods, setShowSignInMethods] = useState(false);
-  const googleFinish = useRef<Promise<CookieSession> | null>(null);
+  const oauthFinish = useRef<Promise<CookieSession> | null>(null);
+  const oauthError =
+    oauthFeedback || (oauthReturn ? oauthReturnError(oauthReturn) : "");
+  const connectCallback =
+    oauthReturn?.result === "connect" ? oauthReturn.provider : null;
 
   const [authError, setAuthError] = useState("");
   const [isAuthPending, setIsAuthPending] = useState(false);
@@ -330,15 +354,18 @@ function App() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void googleSignInAvailable(controller.signal).then(
-      (enabled) => {
-        if (!controller.signal.aborted) setGoogleEnabled(enabled);
-      },
-      () => {},
-    );
+    for (const provider of oauthProviders) {
+      void oauthSignInAvailable(provider, controller.signal).then(
+        (enabled) => {
+          if (!controller.signal.aborted)
+            setOAuthEnabled((current) => ({ ...current, [provider]: enabled }));
+        },
+        () => {},
+      );
+    }
     const url = new URL(window.location.href);
-    if (url.searchParams.has("google")) {
-      url.searchParams.delete("google");
+    if (oauthProviders.some((provider) => url.searchParams.has(provider))) {
+      for (const provider of oauthProviders) url.searchParams.delete(provider);
       window.history.replaceState(
         window.history.state,
         "",
@@ -348,25 +375,25 @@ function App() {
     return () => controller.abort();
   }, []);
 
-  const continueWithGoogle = async () => {
+  const continueWithOAuth = async (provider: OAuthProvider) => {
     if (authPendingRef.current) return;
     authPendingRef.current = true;
     setIsAuthPending(true);
-    setGooglePending(true);
-    setGoogleReturn(null);
-    setGoogleFeedback("");
+    setOAuthPending(provider);
+    setOAuthReturn(null);
+    setOAuthFeedback("");
     setAuthError("");
     try {
-      followGoogleAuthorization(await startGoogleSignIn());
+      followOAuthAuthorization(provider, await startOAuthSignIn(provider));
     } catch (error) {
-      setGoogleFeedback(
+      setOAuthFeedback(
         error instanceof CookieAuthError
           ? error.message
-          : "Google sign-in could not be started. Try again.",
+          : `${oauthProviderNames[provider]} sign-in could not be started. Try again.`,
       );
       authPendingRef.current = false;
       setIsAuthPending(false);
-      setGooglePending(false);
+      setOAuthPending(null);
     }
   };
 
@@ -381,8 +408,8 @@ function App() {
 
     authPendingRef.current = true;
     setIsAuthPending(true);
-    setGoogleReturn(null);
-    setGoogleFeedback("");
+    setOAuthReturn(null);
+    setOAuthFeedback("");
     setAuthError("");
     try {
       const endpoint = isLogin ? "/auth/login" : "/auth/register";
@@ -421,8 +448,8 @@ function App() {
     requests.abort();
     setBulkImportAccess(null);
     setShowSignInMethods(false);
-    setGoogleReturn(null);
-    setGoogleFeedback("");
+    setOAuthReturn(null);
+    setOAuthFeedback("");
     noteRequestRef.current++;
     draftOwnerRef.current = preserveDraftFor ?? null;
     if (!preserveDraftFor) resetEditor();
@@ -478,27 +505,28 @@ function App() {
   };
 
   const restoreSession = async (signal: AbortSignal) => {
-    if (googleReturn === "sign-in" && !googleFeedback) {
-      googleFinish.current ??= authenticateCookieSession(
-        "/auth/google/finish-sign-in",
+    if (oauthReturn?.result === "sign-in" && !oauthFeedback) {
+      const { provider } = oauthReturn;
+      oauthFinish.current ??= authenticateCookieSession(
+        `/auth/${provider}/finish-sign-in`,
         {},
       );
       try {
-        const current = await googleFinish.current;
+        const current = await oauthFinish.current;
         if (signal.aborted) return;
         adoptCookieSession(current);
         cookieChannelRef.current?.postMessage("session-changed");
-        setGoogleReturn(null);
+        setOAuthReturn(null);
         setCookieAction(null);
         return;
       } catch (error) {
         if (signal.aborted) return;
-        setGoogleFeedback(
+        setOAuthFeedback(
           error instanceof CookieAuthError
             ? error.message
-            : "Could not complete Google sign-in. Start again.",
+            : `Could not complete ${oauthProviderNames[provider]} sign-in. Start again.`,
         );
-        setGoogleReturn(null);
+        setOAuthReturn(null);
       }
     }
     try {
@@ -1159,21 +1187,19 @@ function App() {
         }}
         error={
           authError ||
-          googleFeedback ||
-          (googleReturn === "connect"
-            ? "Sign in to the original DevMind account before connecting Google again."
-            : googleReturn && Object.hasOwn(googleReturnErrors, googleReturn)
-              ? googleReturnErrors[googleReturn]
-              : "")
+          oauthError ||
+          (connectCallback
+            ? `Sign in to the original DevMind account before connecting ${oauthProviderNames[connectCallback]} again.`
+            : "")
         }
-        googleEnabled={googleEnabled}
-        googlePending={googlePending}
-        onGoogleSignIn={() => void continueWithGoogle()}
+        oauthEnabled={oauthEnabled}
+        oauthPending={oauthPending}
+        onOAuthSignIn={(provider) => void continueWithOAuth(provider)}
         isPending={isAuthPending}
         onEdit={() => {
           setAuthError("");
-          setGoogleFeedback("");
-          setGoogleReturn(null);
+          setOAuthFeedback("");
+          setOAuthReturn(null);
         }}
         email={email}
         setEmail={setEmail}
@@ -1268,28 +1294,19 @@ function App() {
         notification={notification}
         onDismiss={() => setNotification(null)}
       />
-      {(showSignInMethods ||
-        googleReturn === "connect" ||
-        (googleReturn !== null &&
-          Object.hasOwn(googleReturnErrors, googleReturn)) ||
-        googleFeedback) && (
+      {(showSignInMethods || connectCallback || oauthError) && (
         <SignInMethods
           key={`sign-in-methods:${sessionKey}`}
           apiRequest={apiRequest}
           signal={sessionSignal}
-          enabled={googleEnabled}
-          callback={googleReturn === "connect"}
-          feedback={
-            googleFeedback ||
-            (googleReturn && Object.hasOwn(googleReturnErrors, googleReturn)
-              ? googleReturnErrors[googleReturn]
-              : undefined)
-          }
+          enabled={oauthEnabled}
+          callback={connectCallback}
+          feedback={oauthError}
           onConnect={leaveEditor}
           onClose={() => {
             setShowSignInMethods(false);
-            setGoogleReturn(null);
-            setGoogleFeedback("");
+            setOAuthReturn(null);
+            setOAuthFeedback("");
           }}
         />
       )}

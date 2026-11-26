@@ -12,13 +12,10 @@ import {
 } from "../middleware/cookie-auth.middleware.ts";
 
 import {
-  finishGoogle,
-  googleAvailability,
-  googleCallback,
-  requireGoogle,
+  github,
+  google,
   signInMethods,
-  startGoogle,
-} from "../controllers/google-auth.controller.ts";
+} from "../controllers/oauth.controller.ts";
 
 const router = express.Router();
 
@@ -29,32 +26,38 @@ router.get("/session", protectCookie, discoverCookieSession);
 router.post("/refresh", refreshCookieSession);
 router.post("/logout", logoutCookieSession);
 
-router.get("/google/status", googleAvailability);
 router.get("/methods", protectCookie, signInMethods);
-router.post(
-  "/google/sign-in",
-  requireGoogle,
-  requireCredentialProof,
-  startGoogle("sign-in"),
-);
-router.post(
-  "/google/connect",
-  requireGoogle,
-  protectCookie,
-  startGoogle("connect"),
-);
-router.get("/google/callback", requireGoogle, googleCallback);
-router.post(
-  "/google/finish-sign-in",
-  requireGoogle,
-  requireCredentialProof,
-  finishGoogle("sign-in"),
-);
-router.post(
-  "/google/finish-connect",
-  requireGoogle,
-  protectCookie,
-  finishGoogle("connect"),
-);
+for (const [provider, handlers] of Object.entries({ google, github })) {
+  router.get(`/${provider}/status`, handlers.availability);
+  router.post(
+    `/${provider}/sign-in`,
+    handlers.requireProvider,
+    requireCredentialProof,
+    handlers.start("sign-in"),
+  );
+  router.post(
+    `/${provider}/connect`,
+    handlers.requireProvider,
+    protectCookie,
+    handlers.start("connect"),
+  );
+  router.get(
+    `/${provider}/callback`,
+    handlers.requireProvider,
+    handlers.callback,
+  );
+  router.post(
+    `/${provider}/finish-sign-in`,
+    handlers.requireProvider,
+    requireCredentialProof,
+    handlers.finish("sign-in"),
+  );
+  router.post(
+    `/${provider}/finish-connect`,
+    handlers.requireProvider,
+    protectCookie,
+    handlers.finish("connect"),
+  );
+}
 
 export default router;

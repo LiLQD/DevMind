@@ -266,9 +266,16 @@ export async function cookieWorkspaceRequest(
   return send();
 }
 
-export async function googleSignInAvailable(signal: AbortSignal) {
+export const oauthProviders = ["google", "github"] as const;
+export type OAuthProvider = (typeof oauthProviders)[number];
+export const oauthProviderNames = { google: "Google", github: "GitHub" };
+
+export async function oauthSignInAvailable(
+  provider: OAuthProvider,
+  signal: AbortSignal,
+) {
   const data = record(
-    await request("/auth/google/status", {
+    await request(`/auth/${provider}/status`, {
       signal,
       headers: { "X-DevMind-Origin": window.location.origin },
     }),
@@ -276,23 +283,29 @@ export async function googleSignInAvailable(signal: AbortSignal) {
   return data?.enabled === true;
 }
 
-export function startGoogleSignIn() {
+export function startOAuthSignIn(provider: OAuthProvider) {
   return withSessionLock(async () => {
     const proof = await csrfProof(undefined, true);
-    return request("/auth/google/sign-in", {
+    return request(`/auth/${provider}/sign-in`, {
       method: "POST",
       headers: { [csrfHeader]: proof },
     });
   });
 }
 
-export function followGoogleAuthorization(value: unknown) {
+export function followOAuthAuthorization(
+  provider: OAuthProvider,
+  value: unknown,
+) {
+  const origin =
+    provider === "google"
+      ? "https://accounts.google.com"
+      : "https://github.com";
   const url = record(value)?.url;
-  if (
-    typeof url !== "string" ||
-    new URL(url).origin !== "https://accounts.google.com"
-  ) {
-    throw new Error("Google sign-in could not be started. Try again.");
+  if (typeof url !== "string" || new URL(url).origin !== origin) {
+    throw new Error(
+      `${oauthProviderNames[provider]} sign-in could not be started. Try again.`,
+    );
   }
   window.location.assign(url);
 }

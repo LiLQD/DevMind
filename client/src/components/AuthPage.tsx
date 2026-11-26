@@ -1,13 +1,18 @@
 import type { FormEventHandler } from "react";
+import {
+  oauthProviders,
+  oauthProviderNames,
+  type OAuthProvider,
+} from "../features/auth/cookie-session";
 
 type AuthPageProps = {
   isLogin: boolean;
   onSwitchMode: () => void;
   error: string;
   isPending: boolean;
-  googleEnabled?: boolean;
-  googlePending?: boolean;
-  onGoogleSignIn: () => void;
+  oauthEnabled: Record<OAuthProvider, boolean>;
+  oauthPending: OAuthProvider | null;
+  onOAuthSignIn: (provider: OAuthProvider) => void;
   onEdit: () => void;
   email: string;
   setEmail: (email: string) => void;
@@ -23,9 +28,9 @@ export default function AuthPage({
   onSwitchMode,
   error,
   isPending,
-  googleEnabled,
-  googlePending,
-  onGoogleSignIn,
+  oauthEnabled,
+  oauthPending,
+  onOAuthSignIn,
   onEdit,
   email,
   setEmail,
@@ -112,18 +117,32 @@ export default function AuthPage({
             {isLogin ? "Create an account" : "Back to sign in"}
           </button>
         </form>
-        {googleEnabled && (
-          <button
-            type="button"
-            className="google-sign-in-button"
-            disabled={isPending}
-            aria-busy={googlePending}
-            onClick={onGoogleSignIn}
-          >
-            <img src="/google-sign-in-logo.png" alt="" width="18" height="18" />
-            {googlePending ? "Opening Google…" : "Continue with Google"}
-          </button>
-        )}
+        {oauthProviders
+          .filter((provider) => oauthEnabled[provider])
+          .map((provider) => {
+            const name = oauthProviderNames[provider];
+            const pending = oauthPending === provider;
+            return (
+              <button
+                key={provider}
+                type="button"
+                className="oauth-sign-in-button"
+                disabled={isPending}
+                aria-busy={pending}
+                onClick={() => onOAuthSignIn(provider)}
+              >
+                {provider === "google" && (
+                  <img
+                    src="/google-sign-in-logo.png"
+                    alt=""
+                    width="18"
+                    height="18"
+                  />
+                )}
+                {pending ? `Opening ${name}…` : `Continue with ${name}`}
+              </button>
+            );
+          })}
       </div>
     </div>
   );

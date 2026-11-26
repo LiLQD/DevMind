@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync, randomUUID } from "node:crypto";
+import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { mock, test } from "node:test";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
@@ -13,6 +13,7 @@ const uri = process.env.AUTH_SESSION_TEST_MONGODB_URI;
 const issuer = "https://accounts.google.com";
 const clientId = "mock-google-client";
 const callback = testOrigin + "/api/auth/google/callback";
+const githubCallback = testOrigin + "/api/auth/github/callback";
 const csrf = "X-DevMind-CSRF";
 const moduleUrl = (path) => new URL(`../src/${path}`, import.meta.url).href;
 const metadata = {
@@ -83,18 +84,21 @@ class Browser {
   }
 }
 
-const finish = (browser, mode = "sign-in") =>
-  browser.post(`/api/auth/google/finish-${mode}`, mode);
-const redirected = (response, result) => {
+const finish = (browser, mode = "sign-in", provider = "google") =>
+  browser.post(`/api/auth/${provider}/finish-${mode}`, mode);
+const redirected = (response, result, provider = "google") => {
   assert.equal(response.status, 303);
-  assert.equal(response.headers.location, `${testOrigin}/?google=${result}`);
+  assert.equal(
+    response.headers.location,
+    `${testOrigin}/?${provider}=${result}`,
+  );
   assert.match(response.headers["cache-control"], /no-store/);
   assert.equal(response.headers["referrer-policy"], "no-referrer");
   assert.equal(response.headers["set-cookie"], undefined);
 };
 
 test(
-  "Google OIDC and explicit linking through real MongoDB accounts",
+  "Google and GitHub OAuth through real MongoDB accounts",
   { skip: !uri && !process.env.CI },
   async (t) => {
     assert.ok(uri);
@@ -109,6 +113,11 @@ test(
       GOOGLE_AUTH_CLIENT_SECRET: "test-secret",
       GOOGLE_AUTH_APP_ORIGIN: testOrigin,
       GOOGLE_AUTH_CALLBACK_URI: callback,
+      GITHUB_AUTH_ENABLED: "true",
+      GITHUB_AUTH_CLIENT_ID: "mock-github-client",
+      GITHUB_AUTH_CLIENT_SECRET: "github-test-secret",
+      GITHUB_AUTH_APP_ORIGIN: testOrigin,
+      GITHUB_AUTH_CALLBACK_URI: githubCallback,
     });
     const entry = new Map();
     let redisDown = false;
@@ -156,12 +165,56 @@ test(
       use: "sig",
     };
     const grants = new Map();
+    const githubGrants = new Map();
     let exchanges = 0;
     const fetchMock = mock.method(
       globalThis,
       "fetch",
       async (input, options) => {
         const url = String(input);
+        if (url === "https://github.com/login/oauth/access_token") {
+          const fields = new URLSearchParams(options.body);
+          const code = fields.get("code");
+          const grant = githubGrants.get(code);
+          assert.ok(grant);
+          assert.equal(fields.get("client_id"), "mock-github-client");
+          assert.equal(fields.get("client_secret"), "github-test-secret");
+          assert.equal(fields.get("redirect_uri"), githubCallback);
+          assert.equal(
+            createHash("sha256")
+              .update(fields.get("code_verifier"))
+              .digest("base64url"),
+            grant.challenge,
+          );
+          return Response.json({ token_type: "bearer", access_token: code });
+        }
+        if (
+          [
+            "https://api.github.com/user",
+            "https://api.github.com/user/emails",
+          ].includes(url)
+        ) {
+          const grant = githubGrants.get(
+            options.headers.Authorization.replace("Bearer ", ""),
+          );
+          assert.ok(grant);
+          return Response.json(
+            url.endsWith("/emails")
+              ? [
+                  {
+                    email: "unverified-secondary@example.test",
+                    primary: false,
+                    verified: true,
+                  },
+                  {
+                    email: grant.email,
+                    primary: true,
+                    verified: grant.verified,
+                  },
+                ]
+              : { id: grant.id, login: grant.login },
+          );
+        }
         if (url.endsWith("/.well-known/openid-configuration"))
           return Response.json(metadata);
         if (url === metadata.jwks_uri) return Response.json({ keys: [key] });
@@ -269,7 +322,11 @@ test(
         assert.equal(account.password, undefined);
         assert.deepEqual(
           (await users[0].call("get", "/api/auth/methods")).body,
-          { passwordConfigured: false, googleConnected: true },
+          {
+            passwordConfigured: false,
+            googleConnected: true,
+            githubConnected: false,
+          },
         );
         const password = await new Browser(api).post(
           "/api/auth/login",
@@ -448,6 +505,150 @@ test(
         } finally {
           redisDown = false;
         }
+      },
+    );
+
+    async function completeGitHub(browser, identity, mode = "sign-in") {
+      const started = await browser.post(`/api/auth/github/${mode}`, mode);
+      assert.equal(started.status, 200);
+      const url = new URL(started.body.url);
+      assert.equal(
+        url.origin + url.pathname,
+        "https://github.com/login/oauth/authorize",
+      );
+      assert.equal(url.searchParams.get("scope"), "user:email");
+      assert.equal(url.searchParams.get("redirect_uri"), githubCallback);
+      assert.equal(url.searchParams.get("code_challenge_method"), "S256");
+      const code = randomUUID();
+      githubGrants.set(code, {
+        challenge: url.searchParams.get("code_challenge"),
+        verified: true,
+        login: "devmind-user",
+        ...identity,
+      });
+      const path =
+        "/api/auth/github/callback?" +
+        new URLSearchParams({
+          state: url.searchParams.get("state"),
+          code,
+        });
+      return { response: await browser.call("get", path), path };
+    }
+
+    await t.test(
+      "signs in with a verified GitHub email and keys the account by numeric user ID",
+      async () => {
+        const { body } = await api
+          .get("/api/auth/github/status")
+          .set("X-DevMind-Origin", testOrigin)
+          .expect(200);
+        assert.deepEqual(body, { enabled: true });
+        await api
+          .get("/api/auth/github/status")
+          .set("X-DevMind-Origin", "https://other.example")
+          .expect(200, { enabled: false });
+
+        const original = new Browser(api);
+        const identity = { id: 456, email: "GITHUB@example.test" };
+        const { response, path } = await completeGitHub(original, identity);
+        redirected(response, "sign-in", "github");
+        redirected(await original.call("get", path), "invalid", "github");
+        assert.equal((await finish(original, "sign-in", "github")).status, 200);
+        const user = await original.discover();
+        assert.equal(user.email, "github@example.test");
+        const methods = await original.call("get", "/api/auth/methods");
+        assert.deepEqual(methods.body, {
+          passwordConfigured: false,
+          googleConnected: false,
+          githubConnected: true,
+        });
+
+        const renamed = new Browser(api);
+        redirected(
+          (
+            await completeGitHub(renamed, {
+              ...identity,
+              email: "changed@example.test",
+              login: "changed",
+            })
+          ).response,
+          "sign-in",
+          "github",
+        );
+        assert.equal((await finish(renamed, "sign-in", "github")).status, 200);
+        assert.deepEqual(await renamed.discover(), user);
+      },
+    );
+
+    await t.test(
+      "rejects an unverified primary email and requires explicit linking after a collision",
+      async () => {
+        const visitor = new Browser(api);
+        const owner = new Browser(api);
+        const account = await owner.register("github-owner@example.test");
+        const identity = { id: 789, email: account.email };
+        redirected(
+          (
+            await completeGitHub(visitor, {
+              ...identity,
+              verified: false,
+            })
+          ).response,
+          "invalid",
+          "github",
+        );
+        assert.equal(
+          (await finish(visitor, "sign-in", "github")).body.code,
+          "GITHUB_EXPIRED",
+        );
+
+        redirected(
+          (await completeGitHub(visitor, identity)).response,
+          "sign-in",
+          "github",
+        );
+        assert.equal(
+          (await finish(visitor, "sign-in", "github")).body.code,
+          "GITHUB_EMAIL_IN_USE",
+        );
+        assert.equal(
+          (await owner.call("get", "/api/auth/methods")).body.githubConnected,
+          false,
+        );
+
+        redirected(
+          (await completeGitHub(owner, identity, "connect")).response,
+          "connect",
+          "github",
+        );
+        assert.deepEqual((await finish(owner, "connect", "github")).body, {
+          githubConnected: true,
+        });
+        assert.deepEqual(await owner.discover(), account);
+
+        const other = new Browser(api);
+        await other.register("github-other@example.test");
+        redirected(
+          (await completeGitHub(other, identity, "connect")).response,
+          "connect",
+          "github",
+        );
+        assert.equal(
+          (await finish(other, "connect", "github")).body.code,
+          "GITHUB_ALREADY_LINKED",
+        );
+
+        const returning = new Browser(api);
+        redirected(
+          (await completeGitHub(returning, identity)).response,
+          "sign-in",
+          "github",
+        );
+        assert.equal(
+          (await finish(returning, "sign-in", "github")).status,
+          200,
+        );
+        assert.deepEqual(await returning.discover(), account);
       },
     );
   },
