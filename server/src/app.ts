@@ -39,6 +39,15 @@ export function createApp() {
     next();
   });
 
+  // Liveness probes must succeed independently of Redis and the API quota.
+  app.get("/api/health", (req, res) => {
+    res.json({
+      status: "OK",
+      message: "DevMind API running",
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   // Rate limiting
   app.use("/api", generalLimiter);
   app.use("/api/notes/search", searchLimiter);
@@ -55,15 +64,6 @@ export function createApp() {
         login: "/api/auth/login",
         notes: "/api/notes",
       },
-    });
-  });
-
-  // Health check
-  app.get("/api/health", (req, res) => {
-    res.json({
-      status: "OK",
-      message: "DevMind API running",
-      timestamp: new Date().toISOString(),
     });
   });
 
