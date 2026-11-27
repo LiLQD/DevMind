@@ -24,9 +24,12 @@ const moduleUrl = (relativePath) =>
   pathToFileURL(resolve(new URL("..", import.meta.url).pathname, relativePath))
     .href;
 
-const query = (value) => {
+const query = (value, project = (result) => result) => {
   const chain = {
-    select: () => chain,
+    select: (fields) => {
+      value = project(value, fields);
+      return chain;
+    },
     populate: () => chain,
     sort: () => chain,
     limit: () => chain,
@@ -172,6 +175,13 @@ class Note {
       notes
         .filter((note) => matches(note, filter))
         .map((note) => Note.fromSnapshot(note)),
+      (results, fields) => {
+        for (const field of fields.split(" ")) {
+          if (!field.startsWith("-")) continue;
+          for (const note of results) delete note[field.slice(1)];
+        }
+        return results;
+      },
     );
   }
 
@@ -613,6 +623,10 @@ async function listNotes(auth) {
   return response.body;
 }
 
+function listRepresentation({ embedding: _embedding, ...note }) {
+  return note;
+}
+
 test("rejects duplicate collection names and scopes updates to the owner", async () => {
   const owner = await register("collection-owner@example.com");
   const other = await register("collection-other@example.com");
@@ -664,7 +678,7 @@ test("regenerates embeddings and saves the updated note when content changes", a
     embeddingStatus: "success",
     embedding: [0, 1],
   });
-  assert.deepEqual(await listNotes(auth), [response.body]);
+  assert.deepEqual(await listNotes(auth), [listRepresentation(response.body)]);
 });
 
 test("saves metadata without regenerating embeddings for omitted or identical content", async () => {
@@ -683,7 +697,7 @@ test("saves metadata without regenerating embeddings for omitted or identical co
   }).expect(200);
   assert.deepEqual(second.body, { ...note, title: "Second title" });
   assert.equal(generateEmbedding.mock.callCount(), 0);
-  assert.deepEqual(await listNotes(auth), [second.body]);
+  assert.deepEqual(await listNotes(auth), [listRepresentation(second.body)]);
 });
 
 test("rejects updates to another account's note and to a missing note", async () => {
@@ -703,7 +717,7 @@ test("rejects updates to another account's note and to a missing note", async ()
   ).expect(404);
   assert.deepEqual(missing.body, { message: "Không tìm thấy ghi chú" });
   assert.equal(generateEmbedding.mock.callCount(), 0);
-  assert.deepEqual(await listNotes(owner), [note]);
+  assert.deepEqual(await listNotes(owner), [listRepresentation(note)]);
 });
 
 test("creates and saves a failed note when the embedding service returns null", async () => {
@@ -715,7 +729,7 @@ test("creates and saves a failed note when the embedding service returns null", 
   assert.equal(note.title, "Original title");
   assert.equal(note.content, "Original content");
   assert.equal(note.embeddingStatus, "failed");
-  assert.deepEqual(await listNotes(auth), [note]);
+  assert.deepEqual(await listNotes(auth), [listRepresentation(note)]);
 });
 
 test("saves a failed content update and excludes its retained vector from search", async () => {
@@ -734,7 +748,7 @@ test("saves a failed content update and excludes its retained vector from search
   });
   assert.deepEqual(
     (await listNotes(auth)).find(({ _id }) => _id === note._id),
-    failed.body,
+    listRepresentation(failed.body),
   );
 
   const search = await request(app)
@@ -889,7 +903,7 @@ test("saves the updated note when the embedding service rejects", async () => {
     content: "Updated content",
     embeddingStatus: "failed",
   });
-  assert.deepEqual(await listNotes(auth), [failed.body]);
+  assert.deepEqual(await listNotes(auth), [listRepresentation(failed.body)]);
 });
 
 test("server API smoke flow", async () => {
