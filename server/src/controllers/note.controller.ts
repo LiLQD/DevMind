@@ -13,6 +13,11 @@ import {
   noteResponseProjection,
   resolveNoteCollections,
 } from "../services/note-collections.service.ts";
+import {
+  formatNoteCursor,
+  parseNoteCursor,
+  readNotePage,
+} from "../services/note-pagination.ts";
 import { cosineSimilarity } from "../services/embedding.service.ts";
 
 type NoteBody = {
@@ -31,22 +36,6 @@ type NoteFilters = {
 };
 type NoteParams = { id: string };
 type RouteParams = Request["params"];
-const notePageSize = 50;
-
-function parseNoteCursor(value: string) {
-  if (typeof value !== "string" || value.length > 50) return null;
-  const [timestamp, id, extra] = value.split("~");
-  if (extra !== undefined || !isObjectIdOrHexString(id)) return null;
-  if (!timestamp) return { createdAt: null, id };
-  const createdAt = new Date(timestamp);
-  if (
-    !Number.isFinite(createdAt.getTime()) ||
-    createdAt.toISOString() !== timestamp
-  )
-    return null;
-  return { createdAt, id };
-}
-
 // Resolve tag names to ObjectIds, creating missing tags for this user.
 const resolveTagIds = async (
   names: NoteBody["tags"],
@@ -189,36 +178,24 @@ export const getNotes: RequestHandler<
       return res.json(await list().populate(noteMetadataPopulation(userId)));
     }
 
-    const limit = notePageSize + 1;
-    const notes = await list(
-      boundary
-        ? { createdAt: boundary.createdAt, _id: { $lt: boundary.id } }
-        : undefined,
-    ).limit(limit);
-    if (boundary?.createdAt && notes.length < limit) {
-      // Separate ranges let the index seek past the cursor, even with many tied timestamps.
-      notes.push(
-        ...(await list({ createdAt: { $lt: boundary.createdAt } }).limit(
-          limit - notes.length,
-        )),
-      );
-      if (notes.length < limit) {
-        // Older documents may predate timestamps.
-        notes.push(
-          ...(await list({ createdAt: null }).limit(limit - notes.length)),
-        );
-      }
-    }
-    const hasMore = notes.length > notePageSize;
-    if (hasMore) notes.pop();
+    const { notes, hasMore } = await readNotePage(
+      boundary,
+      (limit, timestamp, idBefore) =>
+        list(
+          timestamp === undefined
+            ? undefined
+            : {
+                createdAt: timestamp,
+                ...(idBefore ? { _id: { $lt: idBefore } } : {}),
+              },
+        ).limit(limit),
+    );
     await Note.populate(notes, noteMetadataPopulation(userId));
     const last = notes.at(-1);
     res.json({
       notes,
       nextCursor:
-        hasMore && last
-          ? `${last.createdAt?.toISOString() ?? ""}~${last.id}`
-          : null,
+        hasMore && last ? formatNoteCursor(last.createdAt, last.id) : null,
     });
   } catch (error) {
     console.error("Get notes error:", error);

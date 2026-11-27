@@ -9,9 +9,23 @@ import {
   noteResponseProjection,
 } from "../services/note-collections.service.ts";
 import {
+  formatNoteCursor,
+  parseNoteCursor,
+  readNotePage,
+} from "../services/note-pagination.ts";
+import {
   generateQueryEmbedding,
   cosineSimilarity,
 } from "../services/embedding.service.ts";
+
+function exactExcerpt(content: string, match: RegExp) {
+  const hit = match.exec(content);
+  if (!hit) return content.length > 160 ? `${content.slice(0, 160)}…` : content;
+  const hitEnd = hit.index + hit[0].length;
+  const start = Math.max(0, hit.index - 40);
+  const end = Math.min(content.length, hitEnd + 60);
+  return `${start > 0 ? "…" : ""}${content.slice(start, end)}${end < content.length ? "…" : ""}`;
+}
 
 const exactSearch: RequestHandler = async (req, res) => {
   const query: unknown = req.body.query;
@@ -24,15 +38,51 @@ const exactSearch: RequestHandler = async (req, res) => {
 
   const escaped = query.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = new RegExp(escaped, "i");
-  const results = await Note.find({
-    userId: req.user!.id,
+  const accountId = req.user!.id;
+  const paginated = req.body.page === true;
+  const cursor: unknown = req.body.cursor;
+  const boundary = cursor === undefined ? undefined : parseNoteCursor(cursor);
+  if (cursor !== undefined && (!paginated || !boundary)) {
+    return res.status(400).json({ message: "Invalid note cursor." });
+  }
+  const filter = {
+    userId: accountId,
     $or: [{ title: match }, { content: match }],
-  })
-    .select("-embedding")
-    .select(noteResponseProjection)
-    .populate(noteMetadataPopulation(req.user!.id))
-    .sort({ updatedAt: -1, _id: -1 });
-  res.json({ results });
+  };
+  const list = (range?: {
+    updatedAt: Date | null | { $lt: Date };
+    _id?: { $lt: string };
+  }) =>
+    Note.find({ ...filter, ...range })
+      .select(`${noteResponseProjection} -embedding`)
+      .sort({ updatedAt: -1, _id: -1 });
+  if (!paginated) {
+    const results = await list().populate(noteMetadataPopulation(accountId));
+    return res.json({ results });
+  }
+
+  const { notes: page, hasMore } = await readNotePage(
+    boundary,
+    (limit, timestamp, idBefore) =>
+      list(
+        timestamp === undefined
+          ? undefined
+          : {
+              updatedAt: timestamp,
+              ...(idBefore ? { _id: { $lt: idBefore } } : {}),
+            },
+      ).limit(limit),
+  );
+  await Note.populate(page, noteMetadataPopulation(accountId));
+  const last = page.at(-1);
+  res.json({
+    results: page.map((note) => ({
+      ...note.toObject(),
+      content: exactExcerpt(note.content ?? "", match),
+    })),
+    nextCursor:
+      hasMore && last ? formatNoteCursor(last.updatedAt, last.id) : null,
+  });
 };
 
 export const searchNotes: RequestHandler = async (req, res, next) => {

@@ -286,6 +286,45 @@ test("loads more notes within a collection and exports all browse pages", async 
   );
 });
 
+test("continues exact search with the submitted query and opens full Markdown", async ({
+  page,
+}) => {
+  await mockWorkspace(page);
+  const search = page.getByRole("textbox", { name: "Search notes" });
+  const phrase = "cache[0]";
+  const submitted: unknown[] = [];
+  await page.route("**/api/notes/search", (route) => {
+    const body = route.request().postDataJSON();
+    submitted.push(body);
+    const result = body.cursor ? seed[1] : seed[0];
+    return route.fulfill({
+      json: {
+        results: [{ ...result, content: `…before ${phrase} after…` }],
+        nextCursor: body.cursor ? null : "next-page",
+      },
+    });
+  });
+  await page.route("**/api/notes/api", (route) =>
+    route.fulfill({
+      json: { ...seed[1], content: "Full Markdown from note detail" },
+    }),
+  );
+  await page.getByRole("radio", { name: "Exact" }).check();
+  await search.fill(phrase);
+  await button(page, "Search").click();
+  await expect(page.locator("mark")).toHaveText(phrase);
+  await search.fill("not submitted");
+  await button(page, "Load more notes").click();
+  await expect(page.locator("mark")).toHaveCount(2);
+  await expect(button(page, "Load more notes")).toHaveCount(0);
+  expect(submitted).toEqual([
+    { query: phrase, mode: "exact", page: true },
+    { query: phrase, mode: "exact", page: true, cursor: "next-page" },
+  ]);
+  await button(page, seed[1].title).click();
+  await expect(page.getByText("Full Markdown from note detail")).toBeVisible();
+});
+
 test("collapses panels independently and restores the exact layout and draft after focus mode", async ({
   page,
 }) => {
