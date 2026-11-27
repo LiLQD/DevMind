@@ -86,6 +86,8 @@ const matches = (document, filter) =>
   Object.entries(filter).every(([key, value]) => {
     if (key === "$or") return value.some((clause) => matches(document, clause));
     if (value && "$gt" in Object(value)) return document[key] > value.$gt;
+    if (value && "$ne" in Object(value))
+      return !matches(document, { [key]: value.$ne });
     if (value instanceof RegExp) return value.test(document[key]);
     if (Array.isArray(document[key])) return document[key].includes(value);
     return String(document[key]) === String(value);
@@ -137,7 +139,7 @@ mock.module(moduleUrl("src/models/AuthSession.ts"), {
 
 class Note {
   constructor(data) {
-    Object.assign(this, data, {
+    Object.assign(this, { contentRevision: 1 }, data, {
       _id: String(nextId++),
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -146,14 +148,19 @@ class Note {
 
   async save() {
     const existing = notes.findIndex((note) => note._id === this._id);
-    const snapshot = this.toObject();
+    const snapshot = structuredClone({ ...this });
     if (existing === -1) notes.push(snapshot);
     else notes[existing] = snapshot;
     return this;
   }
 
   toObject() {
-    return structuredClone({ ...this });
+    const { contentRevision: _contentRevision, ...fields } = this;
+    return structuredClone(fields);
+  }
+
+  toJSON() {
+    return this.toObject();
   }
 
   async populate() {
@@ -177,6 +184,26 @@ class Note {
   static findById(id) {
     const note = notes.find((storedNote) => storedNote._id === String(id));
     return query(note ? Note.fromSnapshot(note) : null);
+  }
+
+  static findOne(filter) {
+    const note = notes.find((entry) => matches(entry, filter));
+    return query(note ? Note.fromSnapshot(note) : null);
+  }
+
+  static findOneAndUpdate(filter, { $set, $inc }) {
+    const note = notes.find((entry) => matches(entry, filter));
+    if (!note) return query(null);
+    Object.assign(note, $set);
+    if ($inc)
+      note.contentRevision = (note.contentRevision ?? 0) + $inc.contentRevision;
+    return query(Note.fromSnapshot(note));
+  }
+
+  static async updateOne(filter, { $set }) {
+    const note = notes.find((entry) => matches(entry, filter));
+    if (note) Object.assign(note, $set);
+    return { matchedCount: note ? 1 : 0 };
   }
 
   static fromSnapshot(note) {

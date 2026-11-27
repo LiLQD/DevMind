@@ -73,13 +73,14 @@ async function importItem(
   }
 
   try {
-    await embedNewNote(note, userId, content);
-    return savedResult(note);
-  } catch {
+    const current = await embedNewNote(note);
+    return savedResult(current ?? note);
+  } catch (error) {
     // The note insert succeeded. A retry must preserve it and avoid another Gemini attempt.
     console.error(
       "Could not store the imported note embedding:",
       note._id.toString(),
+      error,
     );
     return { ...savedResult(note), embeddingStatus: "pending" };
   }

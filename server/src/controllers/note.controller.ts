@@ -3,18 +3,17 @@ import { isObjectIdOrHexString, mongo } from "mongoose";
 import type { Types } from "mongoose";
 import Tag from "../models/Tag.ts";
 import Note from "../models/Note.ts";
-import { embedNewNote } from "../services/note-embedding.service.ts";
+import {
+  embedNewNote,
+  embedNoteRevision,
+} from "../services/note-embedding.service.ts";
 import {
   invalidNoteCollections,
   noteMetadataPopulation,
   noteResponseProjection,
   resolveNoteCollections,
 } from "../services/note-collections.service.ts";
-import { recordUsage } from "../services/usage.service.ts";
-import {
-  generateEmbedding,
-  cosineSimilarity,
-} from "../services/embedding.service.ts";
+import { cosineSimilarity } from "../services/embedding.service.ts";
 
 type NoteBody = {
   title?: string;
@@ -94,10 +93,18 @@ export const createNote: RequestHandler<
 
     await note.save();
 
-    await embedNewNote(note, userId, content);
+    const current = await embedNewNote(note);
+    if (current) {
+      return res
+        .status(201)
+        .json(await current.populate(noteMetadataPopulation(userId)));
+    }
 
-    const populatedNote = await note.populate(noteMetadataPopulation(userId));
-    res.status(201).json(populatedNote);
+    // A concurrent delete does not undo the committed create.
+    const { contentRevision: _contentRevision, ...snapshot } = (
+      await note.populate(noteMetadataPopulation(userId))
+    ).toObject();
+    res.status(201).json(snapshot);
   } catch (error) {
     console.error("Create note error:", error);
     res.status(500).json({ message: "Tạo ghi chú thất bại" });
@@ -220,9 +227,7 @@ export const updateNote: RequestHandler<NoteParams, unknown, NoteBody> = async (
   try {
     const { title, content, tags } = req.body;
     const userId = req.user!.id;
-    const note = await Note.findById(req.params.id).select(
-      noteResponseProjection,
-    );
+    const note = await Note.findById(req.params.id).select("userId");
 
     if (!note) {
       return res.status(404).json({ message: "Không tìm thấy ghi chú" });
@@ -237,31 +242,53 @@ export const updateNote: RequestHandler<NoteParams, unknown, NoteBody> = async (
       return res.status(400).json(invalidNoteCollections);
     }
 
-    const contentChanged = content && content !== note.content;
-    if (title) note.title = title;
-    if (content) note.content = content;
-    if (tags) note.tags = await resolveTagIds(tags, userId);
-    if (collections !== undefined) note.collections = collections;
+    const filter = { _id: note._id, userId };
+    const metadata = {
+      ...(title ? { title } : {}),
+      ...(tags ? { tags: await resolveTagIds(tags, userId) } : {}),
+      ...(collections !== undefined ? { collections } : {}),
+    };
+    const hasMetadata = Object.keys(metadata).length > 0;
+    const options = { returnDocument: "after", runValidators: true } as const;
 
-    if (contentChanged) {
-      note.embeddingStatus = "pending";
-      try {
-        await recordUsage(userId, "noteEmbeddingRequests");
-        const embedding = await generateEmbedding(content);
-        if (embedding) {
-          note.embedding = embedding;
-          note.embeddingStatus = "success";
-        } else {
-          note.embeddingStatus = "failed";
+    if (content) {
+      for (;;) {
+        const changed = await Note.findOneAndUpdate(
+          { ...filter, content: { $ne: content } },
+          {
+            $set: { ...metadata, content, embeddingStatus: "pending" },
+            $inc: { contentRevision: 1 },
+          },
+          options,
+        ).select("content userId +contentRevision");
+        if (changed) {
+          await embedNoteRevision(changed);
+          break;
         }
-      } catch {
-        note.embeddingStatus = "failed";
+
+        const unchanged = hasMetadata
+          ? await Note.findOneAndUpdate(
+              { ...filter, content },
+              { $set: metadata },
+              options,
+            ).select("_id")
+          : await Note.findOne({ ...filter, content }).select("_id");
+        if (unchanged || !(await Note.findOne(filter).select("_id"))) break;
+        // Neither predicate wrote anything. Recheck after the concurrent edit.
       }
+    } else if (hasMetadata) {
+      await Note.findOneAndUpdate(filter, { $set: metadata }, options).select(
+        "_id",
+      );
     }
 
-    await note.save();
-    const populatedNote = await note.populate(noteMetadataPopulation(userId));
-    res.json(populatedNote);
+    const current = await Note.findOne(filter)
+      .select(noteResponseProjection)
+      .populate(noteMetadataPopulation(userId));
+    if (!current) {
+      return res.status(404).json({ message: "Không tìm thấy ghi chú" });
+    }
+    res.json(current);
   } catch (error) {
     console.error("Update note error:", error);
     res.status(500).json({ message: "Cập nhật thất bại" });
