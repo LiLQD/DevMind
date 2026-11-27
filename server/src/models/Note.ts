@@ -12,6 +12,8 @@ const noteSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    // For legacy rows, the first content edit increments the missing field from 0.
+    contentRevision: { type: Number, default: 1, select: false },
     favoritedAt: Date,
     importKey: { type: String, select: false },
     importFingerprint: { type: String, select: false },

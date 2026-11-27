@@ -1,26 +1,35 @@
-import type { Types } from "mongoose";
-import type Note from "../models/Note.ts";
+import Note from "../models/Note.ts";
 import { generateEmbedding } from "./embedding.service.ts";
 import { recordUsage } from "./usage.service.ts";
 
-export async function embedNewNote(
-  note: InstanceType<typeof Note>,
-  accountId: Types.ObjectId,
-  content: string,
-) {
+type EmbeddingInput = Pick<
+  InstanceType<typeof Note>,
+  "_id" | "userId" | "content" | "contentRevision"
+>;
+
+export async function embedNoteRevision(note: EmbeddingInput) {
+  const { _id, userId, content, contentRevision } = note;
+  await recordUsage(userId, "noteEmbeddingRequests");
+  let embedding: number[] | null = null;
   try {
-    await recordUsage(accountId, "noteEmbeddingRequests");
-    const embedding = await generateEmbedding(content);
-    if (embedding) {
-      note.embedding = embedding;
-      note.embeddingStatus = "success";
-    } else {
-      note.embeddingStatus = "failed";
-    }
-    await note.save();
-  } catch (aiError) {
-    note.embeddingStatus = "failed";
-    await note.save();
-    console.error("AI embedding failed but note saved:", aiError);
+    embedding = await generateEmbedding(content);
+  } catch (error) {
+    console.error("AI embedding failed but note saved:", error);
   }
+
+  // A newer edit or a delete can legitimately leave this write with no match.
+  await Note.updateOne(
+    { _id, userId, contentRevision },
+    {
+      $set: embedding
+        ? { embedding, embeddingStatus: "success" }
+        : { embeddingStatus: "failed" },
+    },
+    { timestamps: false },
+  );
+}
+
+export async function embedNewNote(note: EmbeddingInput) {
+  await embedNoteRevision(note);
+  return Note.findOne({ _id: note._id, userId: note.userId });
 }
