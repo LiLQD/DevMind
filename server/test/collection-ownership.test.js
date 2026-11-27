@@ -255,19 +255,26 @@ test(
         const { body: listed } = await authorized(client.get(notesPath)).expect(
           200,
         );
-        assertCollections(pickLegacy(listed), ownedIds);
+        const listedLegacy = pickLegacy(listed);
+        assertCollections(listedLegacy, ownedIds);
+        assert.equal(Object.hasOwn(listedLegacy, "embedding"), false);
+        assert.equal(listedLegacy.content, legacy.content);
+        assert.equal(listedLegacy.embeddingStatus, "success");
         await authorized(
           client.get(notesPath).query({ collectionId: foreign.id }),
         ).expect(200, []);
         const { body: ownedFilter } = await authorized(
           client.get(notesPath).query({ collectionId: first.id }),
         ).expect(200);
-        assertCollections(pickLegacy(ownedFilter), ownedIds);
+        const filteredLegacy = pickLegacy(ownedFilter);
+        assertCollections(filteredLegacy, ownedIds);
+        assert.equal(Object.hasOwn(filteredLegacy, "embedding"), false);
 
         const { body: detail } = await authorized(
           client.get(legacyPath),
         ).expect(200);
         assertCollections(detail, ownedIds);
+        assert.deepEqual(detail.embedding, legacy.embedding);
         const { body: related } = await authorized(client.get(notePath)).expect(
           200,
         );
@@ -584,6 +591,11 @@ test(
           list.map(({ _id }) => _id),
           [nextNote._id, firstNote._id],
         );
+        assert.deepEqual(
+          list.map(({ content }) => content),
+          [nextNote.content, firstNote.content],
+        );
+        assert.ok(list.every((note) => !Object.hasOwn(note, "embedding")));
         await asOther(client.get(notesPath).query({ favorite: "true" })).expect(
           200,
           [],

@@ -146,7 +146,7 @@ export const getNotes: RequestHandler<
     };
 
     const notes = await Note.find(query)
-      .select(noteResponseProjection)
+      .select(`${noteResponseProjection} -embedding`)
       .populate(noteMetadataPopulation(userId))
       // oxlint-disable-next-line unicorn/no-array-sort -- Mongoose query ordering.
       .sort(favoritesOnly ? { favoritedAt: -1, _id: -1 } : { createdAt: -1 });
