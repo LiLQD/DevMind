@@ -22,9 +22,30 @@ type NoteBody = {
   collections?: unknown;
   collection?: unknown;
 };
-type NoteFilters = { favorite?: string; tagId?: string; collectionId?: string };
+type NoteFilters = {
+  favorite?: string;
+  tagId?: string;
+  collectionId?: string;
+  page?: string;
+  cursor?: string;
+};
 type NoteParams = { id: string };
 type RouteParams = Request["params"];
+const notePageSize = 50;
+
+function parseNoteCursor(value: string) {
+  if (typeof value !== "string" || value.length > 50) return null;
+  const [timestamp, id, extra] = value.split("~");
+  if (extra !== undefined || !isObjectIdOrHexString(id)) return null;
+  if (!timestamp) return { createdAt: null, id };
+  const createdAt = new Date(timestamp);
+  if (
+    !Number.isFinite(createdAt.getTime()) ||
+    createdAt.toISOString() !== timestamp
+  )
+    return null;
+  return { createdAt, id };
+}
 
 // Resolve tag names to ObjectIds, creating missing tags for this user.
 const resolveTagIds = async (
@@ -119,8 +140,14 @@ export const getNotes: RequestHandler<
   NoteFilters
 > = async (req, res) => {
   try {
-    const { tagId, collectionId, favorite } = req.query;
+    const { tagId, collectionId, favorite, page, cursor } = req.query;
     const favoritesOnly = favorite === "true";
+    const paginated = page === "true" && !favoritesOnly;
+    const boundary = cursor === undefined ? undefined : parseNoteCursor(cursor);
+    if (cursor !== undefined && (!paginated || !boundary)) {
+      return res.status(400).json({ message: "Invalid note cursor." });
+    }
+    const empty = paginated ? { notes: [], nextCursor: null } : [];
     const userId = req.user!.id;
     if (
       collectionId !== undefined &&
@@ -129,14 +156,14 @@ export const getNotes: RequestHandler<
         userId,
       )) === null
     ) {
-      return res.json([]);
+      return res.json(empty);
     }
     if (
       tagId !== undefined &&
       (!isObjectIdOrHexString(tagId) ||
         !(await Tag.exists({ _id: tagId, userId })))
     ) {
-      return res.json([]);
+      return res.json(empty);
     }
     const query = {
       userId,
@@ -145,13 +172,54 @@ export const getNotes: RequestHandler<
       ...(collectionId ? { collections: collectionId } : {}),
     };
 
-    const notes = await Note.find(query)
-      .select(`${noteResponseProjection} -embedding`)
-      .populate(noteMetadataPopulation(userId))
-      // oxlint-disable-next-line unicorn/no-array-sort -- Mongoose query ordering.
-      .sort(favoritesOnly ? { favoritedAt: -1, _id: -1 } : { createdAt: -1 });
+    const list = (range?: {
+      createdAt: Date | null | { $lt: Date };
+      _id?: { $lt: string };
+    }) =>
+      Note.find({ ...query, ...range })
+        .select(`${noteResponseProjection} -embedding`)
+        // oxlint-disable-next-line unicorn/no-array-sort -- Mongoose query ordering.
+        .sort(
+          favoritesOnly
+            ? { favoritedAt: -1, _id: -1 }
+            : { createdAt: -1, _id: -1 },
+        );
 
-    res.json(notes);
+    if (!paginated) {
+      return res.json(await list().populate(noteMetadataPopulation(userId)));
+    }
+
+    const limit = notePageSize + 1;
+    const notes = await list(
+      boundary
+        ? { createdAt: boundary.createdAt, _id: { $lt: boundary.id } }
+        : undefined,
+    ).limit(limit);
+    if (boundary?.createdAt && notes.length < limit) {
+      // Separate ranges let the index seek past the cursor, even with many tied timestamps.
+      notes.push(
+        ...(await list({ createdAt: { $lt: boundary.createdAt } }).limit(
+          limit - notes.length,
+        )),
+      );
+      if (notes.length < limit) {
+        // Older documents may predate timestamps.
+        notes.push(
+          ...(await list({ createdAt: null }).limit(limit - notes.length)),
+        );
+      }
+    }
+    const hasMore = notes.length > notePageSize;
+    if (hasMore) notes.pop();
+    await Note.populate(notes, noteMetadataPopulation(userId));
+    const last = notes.at(-1);
+    res.json({
+      notes,
+      nextCursor:
+        hasMore && last
+          ? `${last.createdAt?.toISOString() ?? ""}~${last.id}`
+          : null,
+    });
   } catch (error) {
     console.error("Get notes error:", error);
     res.status(500).json({ message: "Lỗi lấy danh sách ghi chú" });

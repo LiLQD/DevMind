@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { join } from "node:path";
+import { readFile } from "node:fs/promises";
 
 const collections = [
   { _id: "system", name: "System Design" },
@@ -70,7 +71,11 @@ const seed = [
   favoritedAt: null as string | null,
 }));
 
-async function mockWorkspace(page: Page, plan: "free" | "pro" = "free") {
+async function mockWorkspace(
+  page: Page,
+  plan: "free" | "pro" = "free",
+  pageSize = 50,
+) {
   let notes = structuredClone(seed);
   let favoriteSequence = 0;
   const requests: string[] = [];
@@ -132,13 +137,18 @@ async function mockWorkspace(page: Page, plan: "free" | "pro" = "free") {
       if (url.searchParams.get("favorite") === "true")
         return reply(notes.filter((note) => note.favoritedAt));
       const collectionId = url.searchParams.get("collectionId");
-      return reply(
-        collectionId
-          ? notes.filter((note) =>
-              note.collections.some(({ _id }) => _id === collectionId),
-            )
-          : notes,
-      );
+      const matching = collectionId
+        ? notes.filter((note) =>
+            note.collections.some(({ _id }) => _id === collectionId),
+          )
+        : notes;
+      if (url.searchParams.get("page") !== "true") return reply(matching);
+      const offset = Number(url.searchParams.get("cursor") ?? 0);
+      const next = offset + pageSize;
+      return reply({
+        notes: matching.slice(offset, next),
+        nextCursor: next < matching.length ? String(next) : null,
+      });
     }
     if (path.startsWith("/api/notes/")) {
       if (path.endsWith("/favorite") && method === "PUT") {
@@ -199,11 +209,16 @@ test("switches collections from memory during refresh and updates membership aft
   const system = navigation.getByRole("button", { name: /System Design/ });
   let refreshes = 0;
   const release = Promise.withResolvers<void>();
-  await page.route("**/api/notes", async (route) => {
-    refreshes++;
-    await release.promise;
-    await route.fallback();
-  });
+  await page.route(
+    (url) =>
+      url.pathname === "/api/notes" && url.searchParams.get("page") === "true",
+    async (route) => {
+      if (route.request().method() !== "GET") return route.fallback();
+      refreshes++;
+      await release.promise;
+      await route.fallback();
+    },
+  );
 
   try {
     await page.clock.setFixedTime(new Date("2026-11-26T12:01:00Z"));
@@ -235,6 +250,40 @@ test("switches collections from memory during refresh and updates membership aft
   await expect(movedNote).toHaveCount(0);
   await backend.click();
   await expect(movedNote).toBeVisible();
+});
+
+test("loads more notes within a collection and exports all browse pages", async ({
+  page,
+}) => {
+  await mockWorkspace(page, "free", 1);
+  const more = button(page, "Load more notes");
+  await expect(button(page, seed[0].title)).toBeVisible();
+  await expect(button(page, seed[1].title)).toHaveCount(0);
+  await more.click();
+  await expect(button(page, seed[1].title)).toBeVisible();
+
+  await page
+    .getByRole("navigation", { name: "Notes and collections" })
+    .getByRole("button", { name: /Backend/ })
+    .click();
+  await expect(button(page, seed[0].title)).toHaveCount(0);
+  await expect(button(page, seed[1].title)).toBeVisible();
+  await expect(button(page, seed[2].title)).toHaveCount(0);
+  await more.click();
+  await expect(button(page, seed[2].title)).toBeVisible();
+  await expect(more).toHaveCount(0);
+
+  await button(page, "Account menu").click();
+  const downloaded = page.waitForEvent("download");
+  await button(page, "Export all notes").click();
+  const download = await downloaded;
+  expect(download.suggestedFilename()).toBe("devmind-notes.md");
+  const markdown = await readFile(await download.path(), "utf8");
+  expect(markdown).toBe(
+    seed
+      .map(({ title, content }) => `# ${title}\n\n${content}`)
+      .join("\n\n---\n\n") + "\n",
+  );
 });
 
 test("collapses panels independently and restores the exact layout and draft after focus mode", async ({

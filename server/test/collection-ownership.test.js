@@ -623,5 +623,69 @@ test(
         );
       },
     );
+    await t.test(
+      "paginates tied timestamps, filters and older notes without gaps",
+      async () => {
+        const { _id: tag } = await Tag.create({
+          userId: owner.id,
+          name: "Page fixture",
+        });
+        const createdAt = new Date("2024-01-01T00:00:00.000Z");
+        const fixture = {
+          userId: owner.id,
+          collections: [first._id],
+          tags: [tag],
+          title: "Page fixture",
+          content: "Complete Markdown body",
+        };
+        const ids = Array.from(
+          { length: 52 },
+          () => new mongoose.Types.ObjectId(),
+        );
+        const older = new mongoose.Types.ObjectId();
+        const missingDate = new mongoose.Types.ObjectId();
+        await Note.collection.insertMany([
+          ...ids.map((_id) => ({ ...fixture, _id, createdAt })),
+          {
+            ...fixture,
+            _id: older,
+            createdAt: new Date("2023-01-01T00:00:00.000Z"),
+          },
+          { ...fixture, _id: missingDate },
+          { ...fixture, userId: other.id, createdAt },
+          { ...fixture, tags: [], createdAt },
+          { ...fixture, collections: [], createdAt },
+        ]);
+        const filters = {
+          page: "true",
+          collectionId: first.id,
+          tagId: String(tag),
+        };
+        const { body: page1 } = await authorized(
+          client.get(notesPath).query(filters),
+        ).expect(200);
+        assert.equal(page1.notes.length, 50);
+        assert.ok(page1.nextCursor);
+        const { body: page2 } = await authorized(
+          client.get(notesPath).query({ ...filters, cursor: page1.nextCursor }),
+        ).expect(200);
+        assert.deepEqual(
+          [...page1.notes, ...page2.notes].map(({ _id }) => _id),
+          [...ids.toReversed(), older, missingDate].map(String),
+        );
+        assert.ok(
+          page2.notes.every(({ content }) => content === fixture.content),
+        );
+        assert.equal(page2.nextCursor, null);
+        await authorized(
+          client.get(notesPath).query({ ...filters, cursor: "invalid" }),
+        ).expect(400);
+        await authorized(
+          client
+            .get(notesPath)
+            .query({ page: "true", collectionId: foreign.id }),
+        ).expect(200, { notes: [], nextCursor: null });
+      },
+    );
   },
 );

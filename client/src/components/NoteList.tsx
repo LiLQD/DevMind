@@ -13,6 +13,7 @@ export type NoteListProps = {
   favorites: FavoriteControls;
   leading?: ReactNode;
   emptyContent?: ReactNode;
+  loadMore?: { loading: boolean; onLoad: () => void };
 };
 
 import NoteItem from "./NoteItem";
@@ -29,6 +30,7 @@ export default function NoteList({
   favorites,
   leading,
   emptyContent,
+  loadMore,
 }: NoteListProps) {
   if (isLoading) {
     return (
@@ -43,7 +45,7 @@ export default function NoteList({
     );
   }
 
-  if (notes.length === 0) {
+  if (notes.length === 0 && !loadMore) {
     return (
       <div className="notes-list" ref={noteListRef}>
         {leading}
@@ -70,6 +72,16 @@ export default function NoteList({
           favorites={favorites}
         />
       ))}
+      {loadMore && (
+        <button
+          type="button"
+          className="secondary-btn"
+          disabled={loadMore.loading}
+          onClick={loadMore.onLoad}
+        >
+          {loadMore.loading ? "Loading notes…" : "Load more notes"}
+        </button>
+      )}
     </div>
   );
 }
