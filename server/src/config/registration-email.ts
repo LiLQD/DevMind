@@ -11,14 +11,21 @@ export function normalizeRegistrationEmail(value: unknown) {
 function configuration() {
   if (process.env.EMAIL_VERIFICATION_ENABLED !== "true") return null;
   const appOrigin = process.env.EMAIL_VERIFICATION_APP_ORIGIN?.trim();
-  const apiKey = process.env.BREVO_API_KEY?.trim();
-  const sender = normalizeRegistrationEmail(process.env.BREVO_SENDER_EMAIL);
-  if (!appOrigin || !cookieAuth.origins.has(appOrigin) || !apiKey || !sender) {
+  const apiKey = process.env.MAILJET_API_KEY?.trim();
+  const apiSecret = process.env.MAILJET_API_SECRET?.trim();
+  const sender = normalizeRegistrationEmail(process.env.MAILJET_SENDER_EMAIL);
+  if (
+    !appOrigin ||
+    !cookieAuth.origins.has(appOrigin) ||
+    !apiKey ||
+    !apiSecret ||
+    !sender
+  ) {
     throw new Error(
-      "Email verification requires a configured browser origin, Brevo API key, and verified sender.",
+      "Email verification requires a configured browser origin, Mailjet API key and secret, and verified sender.",
     );
   }
-  return { appOrigin, apiKey, sender };
+  return { appOrigin, apiKey, apiSecret, sender };
 }
 
 export const registrationEmail = configuration();

@@ -29,24 +29,38 @@ test(
       GEMINI_API_KEY: "test",
       EMAIL_VERIFICATION_ENABLED: "true",
       EMAIL_VERIFICATION_APP_ORIGIN: testOrigin,
-      BREVO_API_KEY: "test-brevo-key",
-      BREVO_SENDER_EMAIL: "sender@example.test",
+      MAILJET_API_KEY: "test-mailjet-key",
+      MAILJET_API_SECRET: "test-mailjet-secret",
+      MAILJET_SENDER_EMAIL: "sender@example.test",
     });
 
     const sent = [];
     let providerDown = false;
+    let providerRejected = false;
     const emailProvider = mock.method(
       globalThis,
       "fetch",
       async (url, options) => {
-        assert.equal(url, "https://api.brevo.com/v3/smtp/email");
-        assert.equal(options.headers["api-key"], "test-brevo-key");
+        assert.equal(url, "https://api.mailjet.com/v3.1/send");
+        assert.equal(
+          options.headers.Authorization,
+          "Basic " +
+            Buffer.from("test-mailjet-key:test-mailjet-secret").toString(
+              "base64",
+            ),
+        );
         assert.equal(options.method, "POST");
-        const body = JSON.parse(options.body);
-        assert.equal(body.sender.email, "sender@example.test");
+        const [message] = JSON.parse(options.body).Messages;
+        assert.deepEqual(message.From, {
+          Name: "DevMind",
+          Email: "sender@example.test",
+        });
         if (providerDown) return new Response(null, { status: 503 });
-        sent.push(body);
-        return Response.json({ messageId: "test-message" }, { status: 201 });
+        if (providerRejected) {
+          return Response.json({ Messages: [{ Status: "error" }] });
+        }
+        sent.push(message);
+        return Response.json({ Messages: [{ Status: "success" }] });
       },
     );
 
@@ -79,7 +93,7 @@ test(
         status,
       );
     const lastToken = () => {
-      const match = sent.at(-1).textContent.match(/^https:\/\/\S+/m);
+      const match = sent.at(-1).TextPart.match(/^https:\/\/\S+/m);
       const link = new URL(match[0]);
       assert.equal(link.origin, testOrigin);
       assert.equal(link.search, "");
@@ -115,7 +129,7 @@ test(
         const accepted = await start("  NEW@Example.Test  ");
         assert.deepEqual(accepted.body, { accepted: true });
         assert.equal(accepted.headers["set-cookie"], undefined);
-        assert.deepEqual(sent.at(-1).to, [{ email }]);
+        assert.deepEqual(sent.at(-1).To, [{ Email: email }]);
         assert.equal(await Account.exists({ email }), null);
         const token = lastToken();
         const replies = await Promise.all([
@@ -195,6 +209,13 @@ test(
           );
         } finally {
           providerDown = false;
+        }
+        providerRejected = true;
+        try {
+          const response = await start("rejected@example.test", 503);
+          assert.equal(response.body.code, "REGISTRATION_EMAIL_UNAVAILABLE");
+        } finally {
+          providerRejected = false;
         }
       },
     );
