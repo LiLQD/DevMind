@@ -231,15 +231,16 @@ Authentication uses same-origin cookies. Keep the existing cookie secrets and se
 
 Enable this on the backend to require a one-time email link before creating a password account. The link expires after 15 minutes. Users enter their name and choose a password after opening it. Existing password accounts and Google or GitHub sign-in continue to use their current login flows.
 
-1. Create a [Brevo Free account](https://www.brevo.com/products/transactional-email/) and [verify a sender](https://developers.brevo.com/docs/getting-started-with-senders-and-domains). Generate a Brevo API key under **SMTP & API**.
+1. Create a Mailjet account, [verify a sending domain](https://dev.mailjet.com/docs/email-api/getting-started/verify-your-domain), and configure SPF and DKIM. Get the API key and secret for the Mailjet account that verified the sender.
 2. Configure these variables in the local server's ignored environment file or on the backend service in Render:
 
    | Variable                        | Value                                                                                                             |
    | ------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
    | `EMAIL_VERIFICATION_ENABLED`    | `true` to require verification for new password accounts. Defaults to disabled.                                   |
    | `EMAIL_VERIFICATION_APP_ORIGIN` | Exact browser origin listed in `COOKIE_AUTH_ORIGINS`. Use `https://dev-mind-nine.vercel.app` for the hosted demo. |
-   | `BREVO_API_KEY`                 | Brevo API key. Store only on the backend.                                                                         |
-   | `BREVO_SENDER_EMAIL`            | Verified Brevo sender email address.                                                                              |
+   | `MAILJET_API_KEY`               | Mailjet API key. Store only on the backend.                                                                       |
+   | `MAILJET_API_SECRET`            | Mailjet API secret. Store only on the backend.                                                                    |
+   | `MAILJET_SENDER_EMAIL`          | Sender address on the verified Mailjet domain.                                                                    |
 
 3. Deploy the updated frontend and backend, then enable the flag and redeploy the backend. Check that Redis supports `GETDEL` (Redis 6.2 or later). Register with a test inbox and confirm the link opens DevMind, completes registration once, and lets the new account sign in again. Setting the flag to `false` restores the previous password registration flow.
 

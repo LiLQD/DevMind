@@ -28,27 +28,39 @@ export async function sendRegistrationEmail(email: string) {
   const link = new URL("/", registrationEmail.appOrigin);
   link.hash = "verify-email=" + token;
 
-  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+  const credentials = Buffer.from(
+    registrationEmail.apiKey + ":" + registrationEmail.apiSecret,
+  ).toString("base64");
+  const response = await fetch("https://api.mailjet.com/v3.1/send", {
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
-      "api-key": registrationEmail.apiKey,
+      Authorization: "Basic " + credentials,
     },
     body: JSON.stringify({
-      sender: { name: "DevMind", email: registrationEmail.sender },
-      to: [{ email }],
-      subject: "Verify your email for DevMind",
-      textContent: [
-        "Open this link to finish creating your DevMind account:",
-        link.href,
-        "The link expires in 15 minutes. If you did not request this email, you can ignore it.",
-      ].join("\n\n"),
+      Messages: [
+        {
+          From: { Name: "DevMind", Email: registrationEmail.sender },
+          To: [{ Email: email }],
+          Subject: "Verify your email for DevMind",
+          TextPart: [
+            "Open this link to finish creating your DevMind account:",
+            link.href,
+            "The link expires in 15 minutes. If you did not request this email, you can ignore it.",
+          ].join("\n\n"),
+        },
+      ],
     }),
     redirect: "error",
     signal: AbortSignal.timeout(5000),
   });
   if (!response.ok) throw new Error("Registration email delivery failed");
+  const result: { Messages?: { Status?: string }[] } | null =
+    await response.json();
+  if (result?.Messages?.[0]?.Status !== "success") {
+    throw new Error("Registration email delivery failed");
+  }
 }
 
 export async function consumeRegistrationToken(token: unknown) {
