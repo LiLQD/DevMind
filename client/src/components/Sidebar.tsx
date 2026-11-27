@@ -45,6 +45,7 @@ export default function Sidebar({
   onRetryFavorites,
   onShowFavorites,
   onBrowseNotes,
+  loadMore,
 }: SidebarProps) {
   const [recentOpen, setRecentOpen] = useState(true);
   const viewingFavorites = favoritesView && !isSearching;
@@ -183,6 +184,7 @@ export default function Sidebar({
         selectedNoteId={selectedNoteId}
         isLoading={isLoading}
         onViewNote={onViewNote}
+        loadMore={loadMore}
         emptyMessage={
           isSearching ? "No notes matched your search." : "No notes yet."
         }

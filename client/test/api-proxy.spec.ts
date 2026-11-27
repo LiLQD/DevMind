@@ -69,16 +69,17 @@ test.beforeAll(async () => {
         );
         break;
       }
-      case "/api/notes":
+      case "/api/notes?page=true":
         response.end(
-          JSON.stringify(
-            posted.map((note) => ({
+          JSON.stringify({
+            notes: posted.map((note) => ({
               ...note,
               _id: note.key,
               createdAt: "2026-01-01",
               embeddingStatus: "success",
             })),
-          ),
+            nextCursor: null,
+          }),
         );
         break;
       case "/api/subscription":

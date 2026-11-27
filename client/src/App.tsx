@@ -60,6 +60,34 @@ type NotificationState = {
   type: "info" | "success" | "error";
 };
 type NoteDetail = Note & { relatedNotes?: Note[] };
+type NotePage = { notes: Note[]; nextCursor: string | null };
+type BrowsePage = NotePage & { fetchedAt: number };
+
+function notePagePath(collectionId = "", cursor?: string) {
+  const params = new URLSearchParams({ page: "true" });
+  if (collectionId) params.set("collectionId", collectionId);
+  if (cursor) params.set("cursor", cursor);
+  return `/notes?${params}`;
+}
+
+function readNotePage(data: NotePage | Note[]): NotePage {
+  // Allow the prior response shape while the frontend and API deploy separately.
+  if (Array.isArray(data)) return { notes: data, nextCursor: null };
+  if (
+    !Array.isArray(data?.notes) ||
+    (data.nextCursor !== null &&
+      (!data.nextCursor || typeof data.nextCursor !== "string"))
+  ) {
+    throw new Error("Unexpected notes response");
+  }
+  return data;
+}
+
+function browseScope(filter: string | null, all: BrowsePage | undefined) {
+  return filter && filter !== uncategorized && all?.nextCursor !== null
+    ? filter
+    : "";
+}
 type NotePayload = {
   title: string;
   content: string;
@@ -197,8 +225,9 @@ function App() {
   const openImportedDraft =
     useRef<(draft: { title: string; content: string }) => void>(null);
   const notesRequest = useRef<AbortController | null>(null);
-  const notesFetchedAt = useRef<number | null>(null);
-  const [completeNotes, setCompleteNotes] = useState<Note[] | null>(null);
+  const notesScope = useRef("");
+  const browseSelection = useRef<string | null>(null);
+  const [notePages, setNotePages] = useState<Record<string, BrowsePage>>({});
   const [selectedCollectionFilter, setSelectedCollectionFilter] = useState<
     string | null
   >(null);
@@ -513,12 +542,13 @@ function App() {
     setIsExportingNotes(false);
     setSession({ cookie: null, requests: new AbortController() });
     setUser(null);
-    setCompleteNotes(null);
+    setNotePages({});
     setFavoritesView(false);
     importingFile.current = false;
     notesRequest.current?.abort();
     notesRequest.current = null;
-    notesFetchedAt.current = null;
+    notesScope.current = "";
+    browseSelection.current = null;
     if (notificationTimerRef.current)
       clearTimeout(notificationTimerRef.current);
     setNotification(null);
@@ -651,18 +681,29 @@ function App() {
     exportRequestRef.current = request;
     setIsExportingNotes(true);
     try {
-      const allNotes = await apiRequest<Note[]>("/notes", {
-        signal: request.signal,
-      });
-      if (request.signal.aborted) return;
-      if (!Array.isArray(allNotes))
-        throw new Error("Unexpected notes response");
-      if (allNotes.length === 0) {
+      const allNotes = new Map<string, Note>();
+      const cursors = new Set<string>();
+      let cursor: string | undefined;
+      do {
+        const page = readNotePage(
+          await apiRequest<NotePage | Note[]>(notePagePath("", cursor), {
+            signal: request.signal,
+          }),
+        );
+        if (request.signal.aborted) return;
+        for (const note of page.notes) allNotes.set(note._id, note);
+        cursor = page.nextCursor ?? undefined;
+        if (cursor) {
+          if (cursors.has(cursor)) throw new Error("Repeated note cursor");
+          cursors.add(cursor);
+        }
+      } while (cursor);
+      if (allNotes.size === 0) {
         showNotification("No notes to export.", "info");
         return;
       }
 
-      const markdown = allNotes
+      const markdown = [...allNotes.values()]
         .map(({ title, content }) => {
           const heading = title.replace(/\s+/g, " ").trim();
           return `# ${heading}\n\n${content}`;
@@ -691,22 +732,35 @@ function App() {
   };
 
   // --- Data fetching ---
-  const fetchNotes = async () => {
+  const fetchNotes = async (scope = "", cursor?: string) => {
     if (!sessionKey || sessionSignal.aborted) return;
     notesRequest.current?.abort();
     const request = new AbortController();
     notesRequest.current = request;
     setIsLoadingNotes(true);
     try {
-      const data = await apiRequest<Note[] | { notes?: Note[]; data?: Note[] }>(
-        "/notes",
-        { signal: request.signal },
+      const page = readNotePage(
+        await apiRequest<NotePage | Note[]>(notePagePath(scope, cursor), {
+          signal: request.signal,
+        }),
       );
       if (sessionSignal.aborted || request.signal.aborted) return;
-      setCompleteNotes(
-        Array.isArray(data) ? data : data.notes || data.data || [],
-      );
-      notesFetchedAt.current = Date.now();
+      const fetchedAt = Date.now();
+      setNotePages((pages) => {
+        const previous = pages[scope];
+        if (!cursor) return { ...pages, [scope]: { ...page, fetchedAt } };
+        if (previous?.nextCursor !== cursor) return pages;
+        const notes = new Map(previous.notes.map((note) => [note._id, note]));
+        for (const note of page.notes) notes.set(note._id, note);
+        return {
+          ...pages,
+          [scope]: {
+            ...previous,
+            notes: [...notes.values()],
+            nextCursor: page.nextCursor,
+          },
+        };
+      });
     } catch {
       if (!sessionSignal.aborted && !request.signal.aborted)
         showNotification("Failed to load notes.", "error");
@@ -716,6 +770,13 @@ function App() {
         setIsLoadingNotes(false);
       }
     }
+  };
+
+  const refreshNotes = () => {
+    const scope = browseScope(browseSelection.current, undefined);
+    notesScope.current = scope;
+    setNotePages({});
+    return fetchNotes(scope);
   };
 
   const fetchCollections = async () => {
@@ -797,7 +858,7 @@ function App() {
       setRelatedNotes([]);
       resetEditor();
       openWorkspace();
-      await fetchNotes();
+      await refreshNotes();
       showNotification("Note created.", "success");
     } catch (err) {
       showNotification(errorMessage(err), "error");
@@ -841,7 +902,7 @@ function App() {
       );
       resetEditor();
       openWorkspace();
-      await fetchNotes();
+      await refreshNotes();
       showNotification("Note updated.", "success");
     } catch (err) {
       showNotification(errorMessage(err), "error");
@@ -869,7 +930,7 @@ function App() {
         results.filter((note) => note._id !== targetId),
       );
       setDeleteTarget(null);
-      await fetchNotes();
+      await refreshNotes();
       if (sessionSignal.aborted) return;
       restoreFocus(dialogOpenerRef.current);
       showNotification("Note deleted.", "success");
@@ -1272,7 +1333,10 @@ function App() {
   }
 
   // --- Main app ---
-  const notes = completeNotes ?? [];
+  const allPage = notePages[""];
+  const scope = browseScope(selectedCollectionFilter, allPage);
+  const activePage = notePages[scope];
+  const notes = activePage?.notes ?? [];
   const collectionNotes = selectedCollectionFilter
     ? notes.filter((note) =>
         selectedCollectionFilter === uncategorized
@@ -1292,12 +1356,17 @@ function App() {
     setFavoritesView(id === favoritesFilter);
     if (id !== favoritesFilter) {
       setSelectedCollectionFilter(id);
+      browseSelection.current = id;
+      const nextScope = browseScope(id, allPage);
+      const existing = notePages[nextScope];
+      const scopeChanged = nextScope !== notesScope.current;
+      notesScope.current = nextScope;
       if (
-        !notesRequest.current &&
-        (notesFetchedAt.current === null ||
-          Date.now() - notesFetchedAt.current >= notesFreshForMs)
-      )
-        void fetchNotes();
+        (scopeChanged || !notesRequest.current) &&
+        (!existing || Date.now() - existing.fetchedAt >= notesFreshForMs)
+      ) {
+        void fetchNotes(nextScope);
+      }
     }
     showBrowse();
   };
@@ -1306,11 +1375,11 @@ function App() {
       ? bulkImportAccess.plan
       : undefined;
   const counts =
-    !selectedCollectionFilter && completeNotes
+    !selectedCollectionFilter && allPage?.nextCursor === null
       ? new Map<string, number>()
       : null;
-  if (counts && completeNotes) {
-    for (const note of completeNotes) {
+  if (counts && allPage) {
+    for (const note of allPage.notes) {
       const ids = note.collections?.map(({ _id }) => _id) ?? [];
       if (!ids.length && !note.collection) ids.push(uncategorized);
       for (const id of new Set(ids)) counts.set(id, (counts.get(id) ?? 0) + 1);
@@ -1429,7 +1498,7 @@ function App() {
               bulkImportAccess.allowed ? (
                 <BulkImportPanel
                   apiRequest={apiRequest}
-                  onSaved={() => void fetchNotes()}
+                  onSaved={() => void refreshNotes()}
                 />
               ) : null
             }
@@ -1456,8 +1525,19 @@ function App() {
               !isSearching &&
               (favoritesView
                 ? favorites.loading
-                : isLoadingNotes && !completeNotes) &&
+                : isLoadingNotes && !activePage) &&
               displayNotes.length === 0
+            }
+            loadMore={
+              !isSearching && !favoritesView && activePage?.nextCursor
+                ? {
+                    loading: isLoadingNotes,
+                    onLoad: () => {
+                      if (!notesRequest.current && activePage.nextCursor)
+                        void fetchNotes(scope, activePage.nextCursor);
+                    },
+                  }
+                : undefined
             }
             isSearching={isSearching}
             searchMode={searchMode}
