@@ -292,6 +292,77 @@ test(
         assert.deepEqual(persisted.collection, legacy.collection);
       },
     );
+    await t.test(
+      "returns the same top five recommendations in score and tie order",
+      async (recommendations) => {
+        const reader = await register("recommendations@example.com");
+        const source = await Note.create({
+          ...payload,
+          userId: reader.id,
+          embeddingStatus: "success",
+          embedding: [1, 0],
+        });
+        const fixtures = await Note.insertMany(
+          [
+            { embedding: [4, 3] },
+            { embedding: [1, 0] },
+            { embedding: [1, 0] },
+            { embedding: [1, 0] },
+            { embedding: [1, 0] },
+            { embedding: [1, 0] },
+            { embedding: [1, 1] },
+            { embedding: [1, 2] },
+            { embedding: null },
+            { embedding: [1, 0], embeddingStatus: "failed" },
+            { embedding: [1, 0], userId: other.id },
+          ].map((candidate) => ({
+            ...payload,
+            userId: reader.id,
+            embeddingStatus: "success",
+            ...candidate,
+          })),
+        );
+        recommendations.after(() =>
+          Note.deleteMany({
+            _id: { $in: [source._id, ...fixtures.map(({ _id }) => _id)] },
+          }),
+        );
+        const candidates = await Note.find({
+          userId: reader.id,
+          _id: { $ne: source._id },
+          embeddingStatus: "success",
+        }).select("-collection");
+        const expected = candidates
+          .map((note) => ({
+            ...note.toObject(),
+            similarityScore: cosineSimilarity(source.embedding, note.embedding),
+          }))
+          .filter(({ similarityScore }) => similarityScore >= 0.65)
+          .toSorted((a, b) => b.similarityScore - a.similarityScore)
+          .slice(0, 5);
+
+        const { body } = await client
+          .get(`${notesPath}/${source.id}`)
+          .set(reader.headers)
+          .expect(200);
+        assert.equal(expected.length, 5);
+        assert.deepEqual(
+          body.relatedNotes,
+          JSON.parse(JSON.stringify(expected)),
+        );
+
+        await Note.deleteMany({ _id: { $in: expected.map(({ _id }) => _id) } });
+        const { body: remaining } = await client
+          .get(`${notesPath}/${source.id}`)
+          .set(reader.headers)
+          .expect(200);
+        assert.deepEqual(
+          remaining.relatedNotes.map(({ _id }) => _id),
+          [fixtures[0].id, fixtures[6].id],
+        );
+      },
+    );
+
     const tagsPath = "/api/tags";
     const asOther = (req) => req.set(other.headers);
     const createTag = (authorize, name) =>

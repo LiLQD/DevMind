@@ -223,35 +223,51 @@ export const getNote: RequestHandler<NoteParams> = async (req, res) => {
     // Get related notes if embedding exists
     const relatedNotes = [];
     if (note.embeddingStatus === "success" && note.embedding) {
-      const otherNotes = await Note.find({
+      const candidates = await Note.find({
         userId,
         _id: { $ne: note._id },
         embeddingStatus: "success",
       })
-        .select(noteResponseProjection)
-        .populate(noteMetadataPopulation(userId));
-
-      const scored = otherNotes.map((n) => ({
-        ...n.toObject(),
-        similarityScore: cosineSimilarity(note.embedding, n.embedding),
-      }));
+        .select("_id embedding")
+        .lean();
 
       const THRESHOLD = 0.65;
-      const filtered = scored
+      const ranked = candidates
+        .map((candidate) => ({
+          id: candidate._id,
+          similarityScore: cosineSimilarity(
+            note.embedding,
+            candidate.embedding,
+          ),
+        }))
         .filter((item) => item.similarityScore >= THRESHOLD)
-        .toSorted((a, b) => b.similarityScore - a.similarityScore);
+        .toSorted((a, b) => b.similarityScore - a.similarityScore)
+        .slice(0, 5);
 
-      // Deduplicate by _id (keep highest score)
-      const seen = new Set();
-      const deduped = [];
-      for (const item of filtered) {
-        if (!seen.has(item._id)) {
-          seen.add(item._id);
-          deduped.push(item);
+      if (ranked.length) {
+        const winners = await Note.find({
+          _id: { $in: ranked.map(({ id }) => id) },
+          userId,
+          embeddingStatus: "success",
+        })
+          .select(noteResponseProjection)
+          .populate(noteMetadataPopulation(userId));
+        const winnersById = new Map(
+          winners.map((winner) => [winner.id, winner]),
+        );
+
+        for (const { id, similarityScore } of ranked) {
+          const winner = winnersById.get(id.toString());
+          // A candidate can change between ranking and hydration.
+          if (
+            winner &&
+            cosineSimilarity(note.embedding, winner.embedding) ===
+              similarityScore
+          ) {
+            relatedNotes.push({ ...winner.toObject(), similarityScore });
+          }
         }
       }
-
-      relatedNotes.push(...deduped.slice(0, 5));
     }
 
     res.json({
