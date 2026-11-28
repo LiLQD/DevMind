@@ -687,5 +687,76 @@ test(
         ).expect(200, { notes: [], nextCursor: null });
       },
     );
+    await t.test(
+      "exact search pages literal matches with bounded excerpts",
+      async () => {
+        const timestamp = new Date("2026-01-01T00:00:00.000Z");
+        const phrase = "TypeError: x[0].call()";
+        const content = `${"before ".repeat(300)}${phrase}${" after".repeat(300)}`;
+        const ids = Array.from(
+          { length: 51 },
+          () => new mongoose.Types.ObjectId(),
+        );
+        const titleOnly = new mongoose.Types.ObjectId();
+        await Note.collection.insertMany([
+          ...ids.map((_id) => ({
+            _id,
+            userId: owner.id,
+            title: "Body match",
+            content,
+            updatedAt: timestamp,
+          })),
+          {
+            _id: titleOnly,
+            userId: owner.id,
+            title: phrase,
+            content: "Fallback ".repeat(300),
+          },
+          {
+            userId: owner.id,
+            title: "Does not match",
+            content: "TypeError: x0Xcall",
+            updatedAt: timestamp,
+          },
+          { userId: other.id, title: "Private", content, updatedAt: timestamp },
+        ]);
+        const input = {
+          query: phrase.toLowerCase(),
+          mode: "exact",
+          page: true,
+        };
+        const search = (fields = {}) =>
+          authorized(client.post(searchPath)).send({ ...input, ...fields });
+        const { body: firstPage } = await search().expect(200);
+        assert.equal(firstPage.results.length, 50);
+        assert.ok(firstPage.nextCursor);
+        const { body: secondPage } = await search({
+          cursor: firstPage.nextCursor,
+        }).expect(200);
+        const results = [...firstPage.results, ...secondPage.results];
+        assert.deepEqual(
+          results.map(({ _id }) => _id),
+          [...ids.toReversed(), titleOnly].map(String),
+        );
+        assert.ok(
+          results.every(({ content: excerpt }) => excerpt.length <= 161),
+        );
+        assert.ok(
+          results
+            .slice(0, -1)
+            .every(({ content: excerpt }) => excerpt.includes(phrase)),
+        );
+        assert.equal(secondPage.nextCursor, null);
+        const { body: detail } = await authorized(
+          client.get(`${notesPath}/${ids[0]}`),
+        ).expect(200);
+        assert.equal(detail.content, content);
+        await search({ cursor: "bad cursor" }).expect(400);
+        await search({ query: "no such note content" }).expect(200, {
+          results: [],
+          nextCursor: null,
+        });
+      },
+    );
   },
 );

@@ -49,6 +49,7 @@ const noteSchema = new mongoose.Schema(
 
 noteSchema.index({ userId: 1, embeddingStatus: 1 });
 noteSchema.index({ userId: 1, createdAt: -1, _id: -1 });
+noteSchema.index({ userId: 1, updatedAt: -1, _id: -1 });
 noteSchema.index({ userId: 1, collections: 1, createdAt: -1, _id: -1 });
 noteSchema.index(
   { userId: 1, importKey: 1 },

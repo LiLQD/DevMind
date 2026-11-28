@@ -216,6 +216,10 @@ function App() {
   const [searchResults, setSearchResults] = useState<Note[]>([]);
   const [searchMode, setSearchMode] = useState<SearchMode>("semantic");
   const [exactSearchQuery, setExactSearchQuery] = useState("");
+  const [exactSearchCursor, setExactSearchCursor] = useState<string | null>(
+    null,
+  );
+  const searchRequest = useRef<AbortController | null>(null);
   const [isSearching, setIsSearching] = useState(false);
 
   // --- Collections & Tags ---
@@ -561,6 +565,7 @@ function App() {
     setSelectedNote(null);
     setRelatedNotes([]);
     setSearchResults([]);
+    cancelSearch();
     setIsSearching(false);
     setIsSearchingAI(false);
     setSearchMode("semantic");
@@ -967,30 +972,57 @@ function App() {
   };
 
   // --- Search ---
-  const handleSearch = async (e?: FormEvent<HTMLFormElement>) => {
-    e?.preventDefault();
-    const submittedQuery = query.trim();
-    if (!submittedQuery) {
-      showNotification("Enter a search query.", "error");
-      return;
-    }
+  const cancelSearch = () => {
+    searchRequest.current?.abort();
+    searchRequest.current = null;
+    setExactSearchCursor(null);
+    setIsSearchingAI(false);
+  };
+
+  const fetchSearch = async (
+    submittedQuery: string,
+    mode: SearchMode,
+    cursor?: string,
+  ) => {
+    searchRequest.current?.abort();
+    const request = new AbortController();
+    searchRequest.current = request;
     setIsSearchingAI(true);
     try {
       const data = await apiRequest<{
         results?: Note[];
         data?: Note[];
+        nextCursor?: string | null;
       }>("/notes/search", {
         method: "POST",
-        signal: sessionSignal,
-        body: JSON.stringify({ query: submittedQuery, mode: searchMode }),
+        signal: request.signal,
+        body: JSON.stringify({
+          query: submittedQuery,
+          mode,
+          ...(mode === "exact"
+            ? { page: true, ...(cursor ? { cursor } : {}) }
+            : {}),
+        }),
       });
+      if (request.signal.aborted || sessionSignal.aborted) return;
       const results = data.results || data.data || [];
-      setSearchResults(results);
-      setExactSearchQuery(searchMode === "exact" ? submittedQuery : "");
+      setSearchResults((previous) => {
+        if (!cursor) return results;
+        const merged = new Map(previous.map((note) => [note._id, note]));
+        for (const note of results) merged.set(note._id, note);
+        return [...merged.values()];
+      });
+      setExactSearchQuery(mode === "exact" ? submittedQuery : "");
+      setExactSearchCursor(
+        mode === "exact" && data.nextCursor !== cursor
+          ? (data.nextCursor ?? null)
+          : null,
+      );
       setIsSearching(true);
-      if (results.length === 0)
+      if (!cursor && results.length === 0)
         showNotification("No matching notes found.", "info");
     } catch (err) {
+      if (request.signal.aborted || sessionSignal.aborted) return;
       const message = errorMessage(err);
       showNotification(
         message.includes("unavailable")
@@ -999,11 +1031,25 @@ function App() {
         "error",
       );
     } finally {
-      if (!sessionSignal.aborted) setIsSearchingAI(false);
+      if (searchRequest.current === request) {
+        searchRequest.current = null;
+        if (!sessionSignal.aborted) setIsSearchingAI(false);
+      }
     }
   };
 
+  const handleSearch = async (e?: FormEvent<HTMLFormElement>) => {
+    e?.preventDefault();
+    const submittedQuery = query.trim();
+    if (!submittedQuery) {
+      showNotification("Enter a search query.", "error");
+      return;
+    }
+    await fetchSearch(submittedQuery, searchMode);
+  };
+
   const clearSearch = () => {
+    cancelSearch();
     setQuery("");
     setSearchResults([]);
     setIsSearching(false);
@@ -1352,6 +1398,7 @@ function App() {
       ? favorites.favorites
       : collectionNotes;
   const browseFilter = (id: string | null) => {
+    cancelSearch();
     setIsSearching(false);
     setFavoritesView(id === favoritesFilter);
     if (id !== favoritesFilter) {
@@ -1529,15 +1576,27 @@ function App() {
               displayNotes.length === 0
             }
             loadMore={
-              !isSearching && !favoritesView && activePage?.nextCursor
+              isSearching && exactSearchCursor
                 ? {
-                    loading: isLoadingNotes,
+                    loading: isSearchingAI,
                     onLoad: () => {
-                      if (!notesRequest.current && activePage.nextCursor)
-                        void fetchNotes(scope, activePage.nextCursor);
+                      if (!searchRequest.current)
+                        void fetchSearch(
+                          exactSearchQuery,
+                          "exact",
+                          exactSearchCursor,
+                        );
                     },
                   }
-                : undefined
+                : !isSearching && !favoritesView && activePage?.nextCursor
+                  ? {
+                      loading: isLoadingNotes,
+                      onLoad: () => {
+                        if (!notesRequest.current && activePage.nextCursor)
+                          void fetchNotes(scope, activePage.nextCursor);
+                      },
+                    }
+                  : undefined
             }
             isSearching={isSearching}
             searchMode={searchMode}
@@ -1554,6 +1613,7 @@ function App() {
               <SearchBar
                 mode={searchMode}
                 setMode={(mode) => {
+                  cancelSearch();
                   setSearchMode(mode);
                   setSearchResults([]);
                   setIsSearching(false);
